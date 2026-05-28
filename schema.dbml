@@ -1,0 +1,219 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Invennico Lead Portal — MongoDB Schema (DBML for dbdiagram.io)
+//
+// CONVENTIONS:
+//  • Real MongoDB collections: users, tokens, leads, credit_transactions, settings
+//  • Tables prefixed with "embed_" are NOT separate collections — they are
+//    embedded sub-documents shown here only to visualise their shape.
+//  • All Ref declarations are at the bottom (no duplicate inline refs).
+//  • Arrays are typed as json with a note describing element shape.
+//  • createdAt / updatedAt added automatically by Mongoose timestamps.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  REAL COLLECTIONS                                                        ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+// ── 1. USERS ─────────────────────────────────────────────────────────────────
+Table users {
+  _id              varchar   [pk, note: "MongoDB ObjectId"]
+  name             varchar   [not null]
+  email            varchar   [unique, not null]
+  password         varchar   [not null, note: "bcrypt hashed — stripped from all API responses"]
+  role             varchar   [not null, note: "enum: admin | partner"]
+  status           varchar   [not null, default: "active", note: "enum: active | inactive"]
+  phone            varchar   [null]
+  department       varchar   [null]
+  location         varchar   [null]
+  avatar           varchar   [null, note: "URL to uploaded avatar image"]
+  totalCredits     int       [not null, default: 0, note: "Lifetime credits granted by admin. 1 credit = 1 AI lead analysis"]
+  consumedCredits  int       [not null, default: 0, note: "Credits used so far. availableCredits = totalCredits - consumedCredits"]
+  createdAt        datetime  [not null]
+  updatedAt        datetime  [not null]
+
+  Note: "Two roles only: admin (full access) and partner (dashboard + leads + profile). Admin allocates and refills credits; each lead AI analysis deducts 1 credit from the submitting user."
+}
+
+
+// ── 2. TOKENS ────────────────────────────────────────────────────────────────
+Table tokens {
+  _id         varchar   [pk, note: "MongoDB ObjectId"]
+  token       varchar   [not null, unique]
+  user        varchar   [not null, note: "ref → users._id"]
+  type        varchar   [not null, note: "enum: refresh | resetPassword  (access tokens are stateless, not stored)"]
+  expires     datetime  [not null]
+  blacklisted boolean   [not null, default: false]
+  createdAt   datetime  [not null]
+  updatedAt   datetime  [not null]
+
+  Note: "Stores refresh and password-reset tokens only. JWT access tokens are verified without DB lookup."
+}
+
+
+// ── 3. LEADS ─────────────────────────────────────────────────────────────────
+Table leads {
+  _id                varchar   [pk, note: "MongoDB ObjectId"]
+  leadId             varchar   [unique, not null, note: "Human-readable ID — e.g. LD-1247 (static) or LD-POC-4821 (AI-generated)"]
+  projectName        varchar   [not null]
+  source             varchar   [not null, note: "enum: Alliance | Direct | Referral | Upwork | Freelancer | Other"]
+  status             varchar   [not null, default: "new", note: "enum: new | under-review | qualified | proposal-sent | won | lost | rejected"]
+  proposal           varchar   [not null, default: "Not Started", note: "enum: Not Started | Draft | Sent | Accepted"]
+  tags               json      [null, note: "string[] — values: crm-synced | crm-pending | proposal-synced | poc"]
+  budget             varchar   [null, note: "e.g. '$40,000 – $60,000' — set by AI or overridden manually"]
+  timeline           varchar   [null, note: "e.g. '4–6 months'"]
+  dateReceived       datetime  [not null]
+  clientContact      varchar   [null]
+  details            text      [null, note: "Raw lead description / RFP text from the create form"]
+  notes              text      [null, note: "Internal pre-sales notes"]
+  attachments        json      [null, note: "string[] — storage URLs or original file names (PDF/DOC/DOCX)"]
+  isAiGenerated      boolean   [not null, default: false]
+  createdBy          varchar   [not null, note: "ref → users._id"]
+  leadSummary        text      [null, note: "AI-generated concise summary"]
+  aiQualification    json      [null, note: "Embedded object — see embed_ai_qualification"]
+  techStack          json      [null, note: "Embedded object — see embed_tech_stack"]
+  milestones         json      [null, note: "Embedded array — see embed_milestone"]
+  suggestedQuestions json      [null, note: "string[] — questions Claude recommends asking the client"]
+  auditLog           json      [null, note: "Embedded array — see embed_audit_entry"]
+  zoho               json      [null, note: "Embedded object (optional) — see embed_zoho_sync"]
+  creditDeducted     boolean   [not null, default: false, note: "true once the 1-credit charge has been applied to createdBy"]
+  createdAt          datetime  [not null]
+  updatedAt          datetime  [not null]
+
+  Note: "Central leads collection. AI-generated leads deduct 1 credit from the submitting user on creation."
+}
+
+
+// ── 4. CREDIT TRANSACTIONS ───────────────────────────────────────────────────
+Table credit_transactions {
+  _id        varchar   [pk, note: "MongoDB ObjectId"]
+  userId     varchar   [not null, note: "ref → users._id — the user whose credit balance changed"]
+  type       varchar   [not null, note: "enum: grant (admin adds credits) | refill (admin tops up) | consume (lead analyzed)"]
+  amount     int       [not null, note: "Positive for grant/refill; negative for consume (always -1 per lead)"]
+  leadId     varchar   [null, note: "ref → leads._id — populated only when type = consume"]
+  grantedBy  varchar   [null, note: "ref → users._id (admin) — populated for grant and refill types"]
+  note       varchar   [null, note: "Optional admin note, e.g. 'Monthly top-up — May 2026'"]
+  createdAt  datetime  [not null]
+
+  Note: "Immutable audit ledger. Never update or delete rows — append only. Running sum of amount equals totalCredits - consumedCredits on the user."
+}
+
+
+// ── 5. SETTINGS ──────────────────────────────────────────────────────────────
+Table settings {
+  _id              varchar   [pk, note: "MongoDB ObjectId — singleton, only one document exists"]
+  pricing          json      [not null, note: "Embedded object — see embed_pricing"]
+  proposalTemplate json      [not null, note: "Embedded object — see embed_proposal_template"]
+  integrations     json      [not null, note: "Embedded array — see embed_integration"]
+  aiPrompts        json      [not null, note: "Embedded object — see embed_ai_prompts"]
+  allowedDomains   json      [not null, note: "string[] — e.g. ['@invennico.com', '@partner.com']. Only emails matching these domains may register."]
+  createdAt        datetime  [not null]
+  updatedAt        datetime  [not null]
+
+  Note: "Singleton — one document per organisation. Seeded on first boot with safe defaults. Only admin role may read/write."
+}
+
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  EMBEDDED SUB-DOCUMENTS  (not real collections — shape reference only)  ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+// ── embed: AI Qualification ───────────────────────────────────────────────────
+Table embed_ai_qualification {
+  score        int      [not null, note: "0–100"]
+  label        varchar  [not null, note: "e.g. High Potential | Medium | Low"]
+  description  text     [not null, note: "Claude's reasoning"]
+  nextAction   text     [not null]
+  handoffNote  text     [not null]
+
+  Note: "[embedded in leads.aiQualification]"
+}
+
+
+// ── embed: Tech Stack ─────────────────────────────────────────────────────────
+Table embed_tech_stack {
+  frontend      json  [null, note: "string[]"]
+  backend       json  [null, note: "string[] — includes database layer"]
+  integrations  json  [null, note: "string[]"]
+  hosting       json  [null, note: "string[]"]
+
+  Note: "[embedded in leads.techStack]"
+}
+
+
+// ── embed: Milestone ──────────────────────────────────────────────────────────
+Table embed_milestone {
+  name      varchar  [not null, note: "e.g. 'Discovery & Design'"]
+  duration  varchar  [not null, note: "e.g. '2–3 weeks'"]
+  cost      varchar  [not null, note: "e.g. '$5,000 – $8,000'"]
+
+  Note: "[embedded array in leads.milestones]"
+}
+
+
+// ── embed: Audit Entry ────────────────────────────────────────────────────────
+Table embed_audit_entry {
+  label  varchar   [not null, note: "e.g. 'Lead Created' | 'Status → Qualified'"]
+  date   datetime  [not null]
+  actor  varchar   [not null, note: "User display name, 'System', or 'AI Bot'"]
+
+  Note: "[embedded array in leads.auditLog]"
+}
+
+
+// ── embed: Zoho Sync ─────────────────────────────────────────────────────────
+Table embed_zoho_sync {
+  status      varchar   [not null, note: "enum: Synced | Pending | Failed"]
+  crmId       varchar   [not null, note: "Zoho CRM record ID"]
+  lastSynced  datetime  [not null]
+
+  Note: "[embedded in leads.zoho — present only after first CRM sync]"
+}
+
+
+// ── embed: Pricing ───────────────────────────────────────────────────────────
+Table embed_pricing {
+  engineerRates          json  [not null, note: "Array of { role: string, rate: number } — hourly USD. Roles: Intern | Junior | Mid-Level | Senior | Architect"]
+  complexityMultipliers  json  [not null, note: "Array of { label: string, value: string } — e.g. { label: 'High Complexity', value: '1.6x' }"]
+  timelineMultipliers    json  [not null, note: "Array of { label: string, value: string } — e.g. { label: 'Rush Delivery', value: '1.4x' }"]
+
+  Note: "[embedded in settings.pricing] — used by the AI prompt to produce realistic cost estimates"
+}
+
+
+// ── embed: Proposal Template ─────────────────────────────────────────────────
+Table embed_proposal_template {
+  sections  json  [not null, note: "Array of { id: string, label: string, enabled: boolean, order: number }. Sections: executive-summary | project-overview | technical-approach | tech-stack | timeline | budget | team-structure | terms"]
+
+  Note: "[embedded in settings.proposalTemplate] — controls which sections appear in generated proposals and their order"
+}
+
+
+// ── embed: Integration ────────────────────────────────────────────────────────
+Table embed_integration {
+  id         varchar  [not null, note: "enum: zoho | google-drive | claude | openai | whatsapp"]
+  name       varchar  [not null]
+  apiKey     varchar  [null, note: "AES-256 encrypted at rest — never returned in plain text"]
+  connected  boolean  [not null, default: false]
+
+  Note: "[embedded array in settings.integrations] — one entry per third-party service"
+}
+
+
+// ── embed: AI Prompts ─────────────────────────────────────────────────────────
+Table embed_ai_prompts {
+  analyzePrompt    text  [not null, note: "System prompt injected into POST /api/analyze. Admin edits this in Settings → Prompts tab. Supports {{title}}, {{details}}, {{source}}, {{notes}}, {{attachments}} placeholders."]
+  whatsappPrompt   text  [not null, note: "System prompt injected into POST /api/whatsapp-reply. Supports {{lead_summary}}, {{tech_stack}}, {{timeline}}, {{budget}}, {{original_lead}} placeholders."]
+
+  Note: "[embedded in settings.aiPrompts] — allows admin to tune AI behaviour without a code deploy"
+}
+
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  REFERENCES  (all declared here — no inline refs above)                 ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+Ref: tokens.user                        > users._id
+Ref: leads.createdBy                    > users._id
+Ref: credit_transactions.userId         > users._id
+Ref: credit_transactions.grantedBy      > users._id
+Ref: credit_transactions.leadId         > leads._id

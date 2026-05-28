@@ -33,12 +33,46 @@ const userSchema = mongoose.Schema(
           throw new Error('Password must contain at least one letter and one number');
         }
       },
-      private: true, // used by the toJSON plugin
+      private: true,
     },
     role: {
       type: String,
       enum: roles,
-      default: 'user',
+      default: 'partner',
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    department: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    location: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    avatar: {
+      type: String,
+      default: null,
+    },
+    totalCredits: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    consumedCredits: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   {
@@ -46,42 +80,29 @@ const userSchema = mongoose.Schema(
   }
 );
 
-// add plugin that converts mongoose to json
 userSchema.plugin(toJSON);
 userSchema.plugin(paginate);
 
-/**
- * Check if email is taken
- * @param {string} email - The user's email
- * @param {ObjectId} [excludeUserId] - The id of the user to be excluded
- * @returns {Promise<boolean>}
- */
+userSchema.virtual('availableCredits').get(function () {
+  return this.totalCredits - this.consumedCredits;
+});
+
 userSchema.statics.isEmailTaken = async function (email, excludeUserId) {
   const user = await this.findOne({ email, _id: { $ne: excludeUserId } });
   return !!user;
 };
 
-/**
- * Check if password matches the user's password
- * @param {string} password
- * @returns {Promise<boolean>}
- */
 userSchema.methods.isPasswordMatch = async function (password) {
-  const user = this;
-  return bcrypt.compare(password, user.password);
+  return bcrypt.compare(password, this.password);
 };
 
 userSchema.pre('save', async function (next) {
-  const user = this;
-  if (user.isModified('password')) {
-    user.password = await bcrypt.hash(user.password, 8);
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 8);
   }
   next();
 });
 
-/**
- * @typedef User
- */
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;

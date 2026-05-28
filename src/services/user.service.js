@@ -1,63 +1,30 @@
 const httpStatus = require('http-status');
 const { User } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { CreditTransaction } = require('../models');
 
-/**
- * Create a user
- * @param {Object} userBody
- * @returns {Promise<User>}
- */
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
-  const user = await User.create(userBody);
-  return user;
+  return User.create(userBody);
 };
 
-/**
- * Query for users
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
- * @param {string} [options.sortBy] - Sort option in the format: sortField:(desc|asc)
- * @param {number} [options.limit] - Maximum number of results per page (default = 10)
- * @param {number} [options.page] - Current page (default = 1)
- * @returns {Promise<QueryResult>}
- */
 const queryUsers = async (filter, options) => {
-  const users = await User.paginate(filter, options);
-  return users;
+  return User.paginate(filter, options);
 };
 
-/**
- * Get user by id
- * @param {ObjectId} id
- * @returns {Promise<User>}
- */
 const getUserById = async (id) => {
   return User.findById(id);
 };
 
-/**
- * Get user by email
- * @param {string} email
- * @returns {Promise<User>}
- */
 const getUserByEmail = async (email) => {
   return User.findOne({ email });
 };
 
-/**
- * Update user by id
- * @param {ObjectId} userId
- * @param {Object} updateBody
- * @returns {Promise<User>}
- */
 const updateUserById = async (userId, updateBody) => {
   const user = await getUserById(userId);
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
-  }
+  if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
@@ -66,17 +33,68 @@ const updateUserById = async (userId, updateBody) => {
   return user;
 };
 
-/**
- * Delete user by id
- * @param {ObjectId} userId
- * @returns {Promise<User>}
- */
 const deleteUserById = async (userId) => {
   const user = await getUserById(userId);
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  if (user.status === 'active') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Mark the user as inactive before deleting');
   }
   await user.remove();
+  return user;
+};
+
+const changePassword = async (user, currentPassword, newPassword) => {
+  if (!(await user.isPasswordMatch(currentPassword))) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Current password is incorrect');
+  }
+  await updateUserById(user.id, { password: newPassword });
+};
+
+/**
+ * Grant or refill credits for a user (admin action).
+ * Increments totalCredits and appends an entry to credit_transactions.
+ */
+const grantCredits = async (userId, amount, grantedById, note) => {
+  const user = await getUserById(userId);
+  if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+
+  user.totalCredits += amount;
+  await user.save();
+
+  // Lazy-require to avoid circular dependency with models/index
+
+  const transaction = await CreditTransaction.create({
+    userId: user.id,
+    type: 'grant',
+    amount,
+    grantedBy: grantedById,
+    note: note || null,
+  });
+
+  return { user, transaction };
+};
+
+/**
+ * Deduct 1 credit when a lead is AI-analyzed.
+ * Called internally by the leads service — not exposed as a direct API endpoint.
+ */
+const consumeCredit = async (userId, leadId) => {
+  const user = await getUserById(userId);
+  if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  if (user.availableCredits < 1) {
+    throw new ApiError(httpStatus.PAYMENT_REQUIRED, 'Insufficient credits. Contact your admin to top up.');
+  }
+
+  user.consumedCredits += 1;
+  await user.save();
+
+  await CreditTransaction.create({
+    userId: user.id,
+    type: 'consume',
+    amount: -1,
+    leadId,
+  });
+
   return user;
 };
 
@@ -87,4 +105,7 @@ module.exports = {
   getUserByEmail,
   updateUserById,
   deleteUserById,
+  changePassword,
+  grantCredits,
+  consumeCredit,
 };
