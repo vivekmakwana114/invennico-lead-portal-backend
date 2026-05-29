@@ -24,23 +24,33 @@ const sendEmail = async (to, subject, text) => {
 };
 
 /**
- * Send reset password email
+ * Send OTP email for password reset
  * @param {string} to
- * @param {string} token
+ * @param {string} otp
  * @returns {Promise}
  */
-const sendResetPasswordEmail = async (to, token) => {
-  const subject = 'Reset password';
-  // replace this url with the link to the reset password page of your front-end app
-  const resetPasswordUrl = `http://link-to-app/reset-password?token=${token}`;
-  const text = `Dear user,
-  To reset your password, click on this link: ${resetPasswordUrl}
-  If you did not request any password resets, then ignore this email.`;
+const sendOtpEmail = async (to, otp) => {
+  const subject = 'Your password reset code';
+  const text = `Dear user,\n\nYour 6-digit verification code is: ${otp}\n\nThis code expires in 10 minutes. If you did not request a password reset, please ignore this email.`;
+  await sendEmail(to, subject, text);
+};
+
+/**
+ * Send welcome email with login credentials when admin creates a new user
+ * @param {string} to
+ * @param {string} name
+ * @param {string} password  plaintext password (before hashing)
+ * @returns {Promise}
+ */
+const sendWelcomeEmail = async (to, name, password) => {
+  const subject = 'Welcome to Invennico Lead Portal — Your Login Credentials';
+  const text = `Hi ${name},\n\nYour account has been created on the Invennico Lead Portal.\n\nHere are your login credentials:\n  Email:    ${to}\n  Password: ${password}\n\nPlease log in and change your password as soon as possible.\n\nRegards,\nInvennico Team`;
   await sendEmail(to, subject, text);
 };
 
 module.exports = {
   transport,
   sendEmail,
-  sendResetPasswordEmail,
+  sendOtpEmail,
+  sendWelcomeEmail,
 };

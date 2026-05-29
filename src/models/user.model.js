@@ -29,8 +29,8 @@ const userSchema = mongoose.Schema(
       trim: true,
       minlength: 8,
       validate(value) {
-        if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
-          throw new Error('Password must contain at least one letter and one number');
+        if (!value.match(/[A-Z]/) || !value.match(/\d/) || !value.match(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/)) {
+          throw new Error('Password must contain at least one uppercase letter, one number, and one special character');
         }
       },
       private: true,
@@ -64,6 +64,16 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null,
     },
+    otp: {
+      type: String,
+      default: null,
+      private: true,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+      private: true,
+    },
     totalCredits: {
       type: Number,
       default: 0,
@@ -96,11 +106,11 @@ userSchema.methods.isPasswordMatch = async function (password) {
   return bcrypt.compare(password, this.password);
 };
 
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(this.password, 8);
   }
-  next();
+  // next();
 });
 
 const User = mongoose.model('User', userSchema);
