@@ -22,7 +22,6 @@ const createUser = {
   body: Joi.object().keys({
     name: Joi.string().required(),
     email: Joi.string().required().email(),
-    password: Joi.string().required().custom(password),
     role: Joi.string().valid('admin', 'partner').default('partner'),
     phone: Joi.string().allow('', null),
     department: Joi.string().allow('', null),

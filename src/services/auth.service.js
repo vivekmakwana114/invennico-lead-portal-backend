@@ -1,7 +1,10 @@
 const httpStatus = require('http-status');
+const moment = require('moment');
+const config = require('../config/config');
 const tokenService = require('./token.service');
 const userService = require('./user.service');
-const Token = require('../models/token.model');
+const emailService = require('./email.service');
+const { Token } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { tokenTypes } = require('../config/tokens');
 
@@ -15,6 +18,12 @@ const loginUserWithEmailAndPassword = async (email, password) => {
   const user = await userService.getUserByEmail(email);
   if (!user || !(await user.isPasswordMatch(password))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+  }
+  if (user.status === 'inactive') {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      'Your account is inactive. Please contact your administrator to regain access.'
+    );
   }
   return user;
 };
@@ -71,9 +80,51 @@ const resetPassword = async (resetPasswordToken, newPassword) => {
   }
 };
 
+/**
+ * Send OTP for password reset
+ * @param {string} email
+ * @returns {Promise}
+ */
+const forgotPassword = async (email) => {
+  const user = await userService.getUserByEmail(email);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'No user found with this email');
+  }
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const otpExpires = moment().add(config.jwt.otpExpirationMinutes, 'minutes').toDate();
+  await userService.updateUserById(user.id, { otp, otpExpires });
+  await emailService.sendOtpEmail(email, otp);
+};
+
+/**
+ * Verify OTP and return a short-lived reset password token
+ * @param {string} email
+ * @param {string} otp
+ * @returns {Promise<string>} resetToken
+ */
+const verifyOtp = async (email, otp) => {
+  const user = await userService.getUserByEmail(email);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'No user found with this email');
+  }
+
+  if (!user.otp || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired OTP');
+  }
+
+  await userService.updateUserById(user.id, { otp: null, otpExpires: null });
+
+  const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
+  const resetToken = tokenService.generateToken(user.id, expires, tokenTypes.RESET_PASSWORD);
+  await tokenService.saveToken(resetToken, user.id, expires, tokenTypes.RESET_PASSWORD);
+  return resetToken;
+};
+
 module.exports = {
   loginUserWithEmailAndPassword,
   logout,
   refreshAuth,
+  forgotPassword,
+  verifyOtp,
   resetPassword,
 };

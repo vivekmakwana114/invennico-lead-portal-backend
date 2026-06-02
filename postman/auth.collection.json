@@ -1,0 +1,205 @@
+{
+  "info": {
+    "name": "Invennico Lead Portal — Auth",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",      "value": "http://localhost:4000/v1" },
+    { "key": "accessToken",  "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "resetToken",   "value": "" },
+    { "key": "testEmail",    "value": "admin@invennico.com" },
+    { "key": "testPassword", "value": "Admin@123456" }
+  ],
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+              "if (pm.response.code === 201) {",
+              "  const { data } = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken',  data.tokens.access.token);",
+              "  pm.collectionVariables.set('refreshToken', data.tokens.refresh.token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+              "if (pm.response.code === 200) {",
+              "  const { data } = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken',  data.tokens.access.token);",
+              "  pm.collectionVariables.set('refreshToken', data.tokens.refresh.token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh Tokens",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/refresh/tokens", "host": ["{{baseUrl}}"], "path": ["auth", "refresh", "tokens"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+              "if (pm.response.code === 200) {",
+              "  const { data } = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken',  data.access.token);",
+              "  pm.collectionVariables.set('refreshToken', data.refresh.token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/forgot/password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot", "password"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/verify/otp", "host": ["{{baseUrl}}"], "path": ["auth", "verify", "otp"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"123456\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+              "if (pm.response.code === 200) {",
+              "  const { data } = pm.response.json();",
+              "  pm.collectionVariables.set('resetToken', data.resetToken);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reset Password",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/auth/reset/password?token={{resetToken}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "reset", "password"],
+          "query": [{ "key": "token", "value": "{{resetToken}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"password\": \"NewPass@7890\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logout",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+              "if (pm.response.code === 200) {",
+              "  pm.collectionVariables.set('accessToken',  '');",
+              "  pm.collectionVariables.set('refreshToken', '');",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

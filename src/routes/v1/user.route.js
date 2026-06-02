@@ -1,6 +1,7 @@
 const express = require('express');
 const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
+const upload = require('../../middlewares/upload');
 const userValidation = require('../../validations/user.validation');
 const userController = require('../../controllers/user.controller');
 
@@ -8,11 +9,12 @@ const router = express.Router();
 
 // ── Own profile (any authenticated user) ─────────────────────────────────────
 router
-  .route('/me')
+  .route('/profile')
   .get(auth(), userController.getMe)
   .patch(auth(), validate(userValidation.updateProfile), userController.updateMe);
 
-router.post('/me/change/password', auth(), validate(userValidation.changePassword), userController.changePassword);
+router.post('/profile/avatar', auth(), upload.single('avatar'), userController.uploadAvatar);
+router.post('/profile/change/password', auth(), validate(userValidation.changePassword), userController.changePassword);
 
 // ── User management (admin only) ──────────────────────────────────────────────
 router
