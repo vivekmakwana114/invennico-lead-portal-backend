@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const xss = require('xss-clean');
@@ -49,6 +50,9 @@ passport.use('jwt', jwtStrategy);
 if (config.env === 'production') {
   app.use('/v1/auth', authLimiter);
 }
+
+// serve uploaded images
+app.use('/images', express.static(path.join(__dirname, '..', 'images')));
 
 // v1 api routes
 app.use('/v1', routes);

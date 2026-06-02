@@ -2,22 +2,9 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
-const { userService, emailService } = require('../services');
+const { userService } = require('../services');
 
-const generatePassword = () => {
-  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const lower = 'abcdefghijklmnopqrstuvwxyz';
-  const digits = '0123456789';
-  const special = '!@#$%^&*';
-  const all = upper + lower + digits + special;
-  let pwd =
-    upper[Math.floor(Math.random() * upper.length)] +
-    lower[Math.floor(Math.random() * lower.length)] +
-    digits[Math.floor(Math.random() * digits.length)] +
-    special[Math.floor(Math.random() * special.length)];
-  for (let i = 4; i < 12; i++) pwd += all[Math.floor(Math.random() * all.length)];
-  return pwd.split('').sort(() => Math.random() - 0.5).join('');
-};
+const DEFAULT_PASSWORD = 'NewUser@707K10';
 
 // ── Admin: list all users ─────────────────────────────────────────────────────
 const getUsers = catchAsync(async (req, res) => {
@@ -42,14 +29,12 @@ const getUser = catchAsync(async (req, res) => {
   });
 });
 
-// ── Admin: create / invite a new user ─────────────────────────────────────────
+// ── Admin: create a new user with default password ───────────────────────────
 const createUser = catchAsync(async (req, res) => {
-  const password = generatePassword();
-  const user = await userService.createUser({ ...req.body, password });
-  await emailService.sendWelcomeEmail(user.email, user.name, password);
+  const user = await userService.createUser({ ...req.body, password: DEFAULT_PASSWORD });
   res.status(httpStatus.CREATED).send({
     success: true,
-    message: 'User created and credentials sent to their email',
+    message: 'User created successfully',
     data: { user },
   });
 });
@@ -96,6 +81,18 @@ const changePassword = catchAsync(async (req, res) => {
   res.send({ success: true, message: 'Password changed successfully' });
 });
 
+// ── Any authenticated user: upload own avatar ─────────────────────────────────
+const uploadAvatar = catchAsync(async (req, res) => {
+  if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded');
+  const avatarUrl = `/images/avatars/${req.file.filename}`;
+  const user = await userService.updateUserById(req.user.id, { avatar: avatarUrl });
+  res.send({
+    success: true,
+    message: 'Avatar uploaded successfully',
+    data: { user },
+  });
+});
+
 // ── Admin: grant or refill credits for a user ────────────────────────────────
 const grantCredits = catchAsync(async (req, res) => {
   const { amount, note } = req.body;
@@ -115,6 +112,7 @@ module.exports = {
   deleteUser,
   getMe,
   updateMe,
+  uploadAvatar,
   changePassword,
   grantCredits,
 };

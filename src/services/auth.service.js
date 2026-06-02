@@ -19,6 +19,12 @@ const loginUserWithEmailAndPassword = async (email, password) => {
   if (!user || !(await user.isPasswordMatch(password))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
   }
+  if (user.status === 'inactive') {
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      'Your account is inactive. Please contact your administrator to regain access.'
+    );
+  }
   return user;
 };
 
@@ -102,11 +108,8 @@ const verifyOtp = async (email, otp) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'No user found with this email');
   }
 
-  const isDevBypass = config.env === 'development' && otp === '123456';
-  if (!isDevBypass) {
-    if (!user.otp || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
-      throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired OTP');
-    }
+  if (!user.otp || user.otp !== otp || !user.otpExpires || user.otpExpires < new Date()) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired OTP');
   }
 
   await userService.updateUserById(user.id, { otp: null, otpExpires: null });
