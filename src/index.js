@@ -15,20 +15,20 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   });
 });
 
-const exitHandler = () => {
+const exitHandler = (exitCode = 1) => {
   if (server) {
     server.close(() => {
       logger.info('Server closed');
-      process.exit(1);
+      process.exit(exitCode);
     });
   } else {
-    process.exit(1);
+    process.exit(exitCode);
   }
 };
 
 const unexpectedErrorHandler = (error) => {
   logger.error(error);
-  exitHandler();
+  exitHandler(1);
 };
 
 process.on('uncaughtException', unexpectedErrorHandler);
@@ -36,7 +36,10 @@ process.on('unhandledRejection', unexpectedErrorHandler);
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received');
-  if (server) {
-    server.close();
-  }
+  exitHandler(0);
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received');
+  exitHandler(0);
 });
