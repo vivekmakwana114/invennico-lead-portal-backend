@@ -88,14 +88,14 @@ const consumeCredit = async (userId, leadId) => {
   user.consumedCredits += 1;
   await user.save();
 
-  await CreditTransaction.create({
+  const transaction = await CreditTransaction.create({
     userId: user.id,
     type: 'consume',
     amount: -1,
     leadId,
   });
 
-  return user;
+  return { user, transaction };
 };
 
 module.exports = {
