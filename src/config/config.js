@@ -19,6 +19,8 @@ const envVarsSchema = Joi.object()
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     ANTHROPIC_API_KEY: Joi.string().description('Anthropic API key for lead analysis and WhatsApp reply generation'),
     ENCRYPTION_KEY: Joi.string().description('32-char AES-256 key for encrypting integration API keys in settings'),
+    GOOGLE_SERVICE_ACCOUNT_KEY: Joi.string().description('Google service account JSON (stringified) for Drive uploads'),
+    GOOGLE_DRIVE_FOLDER_ID: Joi.string().description('Fallback Google Drive folder ID for proposal uploads'),
   })
   .unknown();
 
@@ -58,5 +60,15 @@ module.exports = {
   },
   encryption: {
     key: envVars.ENCRYPTION_KEY,
+  },
+  google: {
+    serviceAccountKey: (() => {
+      try {
+        return envVars.GOOGLE_SERVICE_ACCOUNT_KEY ? JSON.parse(envVars.GOOGLE_SERVICE_ACCOUNT_KEY) : null;
+      } catch {
+        return null;
+      }
+    })(),
+    driveFolderId: envVars.GOOGLE_DRIVE_FOLDER_ID || null,
   },
 };
