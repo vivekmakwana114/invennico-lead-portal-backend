@@ -44,7 +44,9 @@ const createLead = {
   body: Joi.object().keys({
     title: Joi.string().required().trim(),
     details: Joi.string().required(),
-    source: Joi.string().valid(...SOURCES).required(),
+    source: Joi.string()
+      .valid(...SOURCES)
+      .required(),
     notes: Joi.string().allow('', null),
     attachments: Joi.array().items(Joi.string()).default([]),
     clientContact: Joi.string().allow('', null),
@@ -119,7 +121,9 @@ const analyzeLead = {
   body: Joi.object().keys({
     title: Joi.string().required(),
     details: Joi.string().required(),
-    source: Joi.string().valid(...SOURCES).required(),
+    source: Joi.string()
+      .valid(...SOURCES)
+      .required(),
     notes: Joi.string().allow('', null),
     attachments: Joi.string().allow('', null),
   }),
@@ -136,6 +140,17 @@ const generateWhatsapp = {
   }),
 };
 
+const generateProposal = {
+  params: Joi.object().keys({
+    leadId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    preparedFor: Joi.string().allow('', null),
+    preparedBy: Joi.string().allow('', null),
+    scopeDoc: Joi.string().allow('', null),
+  }),
+};
+
 module.exports = {
   createLead,
   getLeads,
@@ -144,4 +159,5 @@ module.exports = {
   deleteLead,
   analyzeLead,
   generateWhatsapp,
+  generateProposal,
 };

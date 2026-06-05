@@ -66,6 +66,19 @@ const uploadPdf = catchAsync(async (req, res) => {
   res.send({ success: true, message: 'PDF uploaded and text extracted', data: result });
 });
 
+const generateProposal = catchAsync(async (req, res) => {
+  const { preparedFor, preparedBy, scopeDoc } = req.body;
+  const result = await leadService.generateProposal(req.params.leadId, req.user, { preparedFor, preparedBy, scopeDoc });
+  res.send({ success: true, message: 'Proposal generated successfully', data: result });
+});
+
+const downloadProposal = catchAsync(async (req, res) => {
+  const { filePath, fileName } = await leadService.downloadProposal(req.params.leadId, req.user);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.sendFile(filePath);
+});
+
 module.exports = {
   createLead,
   getLeads,
@@ -76,4 +89,6 @@ module.exports = {
   analyzeLead,
   generateWhatsapp,
   uploadPdf,
+  generateProposal,
+  downloadProposal,
 };

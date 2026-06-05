@@ -47,4 +47,12 @@ router
   .patch(auth(), validate(leadValidation.updateLead), leadController.updateLead)
   .delete(auth(), validate(leadValidation.deleteLead), leadController.deleteLead);
 
+router.post(
+  '/:leadId/generate/proposal',
+  auth(),
+  validate(leadValidation.generateProposal),
+  leadController.generateProposal
+);
+router.get('/:leadId/proposal/download', auth(), validate(leadValidation.getLead), leadController.downloadProposal);
+
 module.exports = router;

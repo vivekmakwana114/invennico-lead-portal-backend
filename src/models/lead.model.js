@@ -117,6 +117,7 @@ const leadSchema = mongoose.Schema(
     estimation: {
       timeline: { type: String, default: null },
       budgetRange: { type: String, default: null },
+      aiBudgetRange: { type: String, default: null },
       milestones: { type: [milestoneSchema], default: [] },
     },
 
@@ -134,6 +135,9 @@ const leadSchema = mongoose.Schema(
 
     proposalDoc: {
       url: { type: String, default: null },
+      filePath: { type: String, default: null },
+      fileName: { type: String, default: null },
+      content: { type: mongoose.Schema.Types.Mixed, default: null },
       generatedAt: { type: Date, default: null },
     },
 
@@ -165,9 +169,11 @@ leadSchema.index({ createdAt: -1 });
 leadSchema.options.toJSON = {
   transform(doc, ret) {
     if (ret.leadNumber != null) {
+      // eslint-disable-next-line no-param-reassign
       ret.leadId = `LD-${ret.leadNumber}`;
     }
     // toJSON plugin strips createdAt globally; restore it for leads since the UI needs it
+    // eslint-disable-next-line no-param-reassign
     ret.createdAt = doc.createdAt;
   },
 };
@@ -178,11 +184,7 @@ leadSchema.plugin(paginate);
 leadSchema.pre('save', async function () {
   if (this.isNew) {
     const Counter = mongoose.model('Counter');
-    const counter = await Counter.findOneAndUpdate(
-      { model: 'lead' },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true }
-    );
+    const counter = await Counter.findOneAndUpdate({ model: 'lead' }, { $inc: { seq: 1 } }, { new: true, upsert: true });
     this.leadNumber = counter.seq;
   }
 });
