@@ -31,6 +31,7 @@ const analysisSchema = Joi.object({
 const estimationSchema = Joi.object({
   timeline: Joi.string().allow('', null),
   budgetRange: Joi.string().allow('', null),
+  aiBudgetRange: Joi.string().allow('', null),
   milestones: Joi.array().items(
     Joi.object({
       phase: Joi.string().allow('', null),
@@ -139,11 +140,13 @@ const analyzeLead = {
 const generateWhatsapp = {
   body: Joi.object().keys({
     leadId: Joi.string().custom(objectId),
-    leadSummary: Joi.string().required(),
+    leadSummary: Joi.string().allow('', null),
     techStack: Joi.string().allow('', null),
     timeline: Joi.string().allow('', null),
     budget: Joi.string().allow('', null),
     originalLead: Joi.string().allow('', null),
+    previousDraft: Joi.string().allow('', null),
+    followUpNotes: Joi.string().allow('', null),
   }),
 };
 

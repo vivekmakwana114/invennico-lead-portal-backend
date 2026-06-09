@@ -9,9 +9,11 @@ Company context:
 - Digital tech studio building web, mobile, SaaS, AI, and enterprise systems
 - Strong in MERN, Next.js, React Native, Flutter, Node.js, PostgreSQL, AWS
 - Clients range from startups to enterprise
-- Focus on scalable, practical, production-ready solutions
+- Focus on scalable, practical, production-ready solutions`;
 
-Analyze the following lead and return ONLY a valid JSON object. No markdown, no explanation, no code fences.
+// Always appended after the admin prompt (or default), just like the INPUT block.
+// Guarantees the JSON schema is present regardless of what the admin has saved.
+const FIXED_OUTPUT_BLOCK = `Analyze the following lead and return ONLY a valid JSON object. No markdown, no explanation, no code fences.
 
 OUTPUT (strict JSON only):
 {
@@ -62,9 +64,11 @@ const analyzeLead = async ({ title, details, source, notes, attachments, pdfCont
   logger.debug('[AI Analyze] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
 
   const settings = await Settings.findById('global').lean();
-  const instructions = settings?.aiPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+  const persona = settings?.aiPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
 
-  const prompt = `${instructions}
+  const prompt = `${persona}
+
+${FIXED_OUTPUT_BLOCK}
 
 INPUT:
 Title: ${title || 'N/A'}
@@ -100,18 +104,30 @@ PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}`;
   return parsed;
 };
 
-const generateWhatsapp = async ({ leadSummary, techStack, timeline, budget, originalLead }) => {
-  const inputPayload = {
-    leadSummary: leadSummary || 'N/A',
-    techStack: techStack || 'N/A',
-    timeline: timeline || 'N/A',
-    budget: budget || 'N/A',
-    originalLead: originalLead || 'N/A',
-  };
+const generateWhatsapp = async ({
+  leadSummary,
+  techStack,
+  timeline,
+  budget,
+  originalLead,
+  previousDraft,
+  followUpNotes,
+}) => {
+  const isRegen = !!(previousDraft && followUpNotes);
+
+  const inputPayload = isRegen
+    ? { mode: 'regenerate', previousDraftLength: previousDraft.length, followUpNotes }
+    : {
+        leadSummary: leadSummary || 'N/A',
+        techStack: techStack || 'N/A',
+        timeline: timeline || 'N/A',
+        budget: budget || 'N/A',
+        originalLead: originalLead || 'N/A',
+      };
 
   logger.debug('[AI WhatsApp] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
 
-  const prompt = `You are a pre-sales consultant writing a WhatsApp message to a potential client.
+  const firstUserPrompt = `You are a pre-sales consultant writing a WhatsApp message to a potential client.
 
 Write a professional, confident, and concise WhatsApp reply.
 
@@ -156,12 +172,30 @@ Do NOT sound robotic.`;
 
   const client = getClient();
 
+  let messages;
+
+  if (isRegen) {
+    // Chat-style refinement: previous draft is the assistant turn, follow-up is the next user turn
+    messages = [
+      { role: 'user', content: firstUserPrompt },
+      { role: 'assistant', content: previousDraft },
+      {
+        role: 'user',
+        content: `Please revise the message based on the following update:\n\n${followUpNotes}\n\nKeep the same tone and structure. Return only the revised WhatsApp message — no explanation, no preamble.`,
+      },
+    ];
+    logger.debug('[AI WhatsApp] Mode: regenerate — 3-turn chat');
+  } else {
+    messages = [{ role: 'user', content: firstUserPrompt }];
+    logger.debug('[AI WhatsApp] Mode: first generation');
+  }
+
   logger.debug('[AI WhatsApp] Calling Claude — model: claude-haiku-4-5-20251001, max_tokens: 1024');
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
+    messages,
   });
 
   const message = response.content[0].type === 'text' ? response.content[0].text : '';
