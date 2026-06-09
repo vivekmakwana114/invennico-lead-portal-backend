@@ -5,3 +5,4 @@ module.exports.userService = require('./user.service');
 module.exports.leadService = require('./lead.service');
 module.exports.aiService = require('./ai.service');
 module.exports.settingsService = require('./settings.service');
+module.exports.dashboardService = require('./dashboard.service');

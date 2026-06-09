@@ -190,6 +190,11 @@ const queryLeads = async (filter, options, requestingUser) => {
     dbFilter.createdAt = { $gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) };
   }
 
+  if (filter.search && filter.search.trim()) {
+    const regex = new RegExp(filter.search.trim(), 'i');
+    dbFilter.$or = [{ title: regex }, { clientContact: regex }];
+  }
+
   return Lead.paginate(dbFilter, { ...options, sortBy: 'createdAt:desc' });
 };
 
@@ -197,7 +202,13 @@ const queryLeads = async (filter, options, requestingUser) => {
  * Get a single lead by ID with ownership enforcement.
  */
 const getLeadById = async (leadId, requestingUser) => {
-  const lead = await Lead.findById(leadId).populate('createdBy', 'name email');
+  let lead;
+  if (/^LD-\d+$/i.test(leadId)) {
+    const num = parseInt(leadId.split('-')[1], 10);
+    lead = await Lead.findOne({ leadNumber: num }).populate('createdBy', 'name email');
+  } else {
+    lead = await Lead.findById(leadId).populate('createdBy', 'name email');
+  }
   if (!lead) throw new ApiError(httpStatus.NOT_FOUND, 'Lead not found');
 
   const createdById = lead.createdBy?._id?.toString() || lead.createdBy?.toString();

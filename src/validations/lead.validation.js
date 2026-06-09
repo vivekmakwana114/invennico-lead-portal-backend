@@ -31,6 +31,7 @@ const analysisSchema = Joi.object({
 const estimationSchema = Joi.object({
   timeline: Joi.string().allow('', null),
   budgetRange: Joi.string().allow('', null),
+  aiBudgetRange: Joi.string().allow('', null),
   milestones: Joi.array().items(
     Joi.object({
       phase: Joi.string().allow('', null),
@@ -66,20 +67,27 @@ const getLeads = {
     source: Joi.string().valid(...SOURCES),
     createdBy: Joi.string().custom(objectId),
     dateRange: Joi.number().valid(7, 30, 90, 180, 0),
+    search: Joi.string().trim().allow('', null),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
   }),
 };
 
+// Accepts MongoDB ObjectId OR "LD-123" display IDs
+const leadIdOrObjectId = (value, helpers) => {
+  if (/^LD-\d+$/i.test(value)) return value;
+  return objectId(value, helpers);
+};
+
 const getLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
 };
 
 const updateLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
   body: Joi.object()
     .keys({
@@ -113,7 +121,7 @@ const updateLead = {
 
 const deleteLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
 };
 
@@ -132,11 +140,13 @@ const analyzeLead = {
 const generateWhatsapp = {
   body: Joi.object().keys({
     leadId: Joi.string().custom(objectId),
-    leadSummary: Joi.string().required(),
+    leadSummary: Joi.string().allow('', null),
     techStack: Joi.string().allow('', null),
     timeline: Joi.string().allow('', null),
     budget: Joi.string().allow('', null),
     originalLead: Joi.string().allow('', null),
+    previousDraft: Joi.string().allow('', null),
+    followUpNotes: Joi.string().allow('', null),
   }),
 };
 

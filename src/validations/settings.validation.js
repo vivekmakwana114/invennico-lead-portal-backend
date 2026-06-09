@@ -41,6 +41,7 @@ const updateSettings = {
         .min(1),
       googleDriveFolderId: Joi.string().allow('', null),
       scopeDocumentContent: Joi.string().allow('', null),
+      aiPrompt: Joi.string().allow('', null),
       pricingConfig: Joi.object({
         engineerRates: Joi.object({
           intern: Joi.number().min(0),
@@ -64,4 +65,10 @@ const updateSettings = {
     .min(1),
 };
 
-module.exports = { updateSettings };
+const updatePrompt = {
+  body: Joi.object().keys({
+    aiPrompt: Joi.string().allow('', null).required(),
+  }),
+};
+
+module.exports = { updateSettings, updatePrompt };

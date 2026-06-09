@@ -1,0 +1,877 @@
+{
+  "info": {
+    "name": "Invennico Lead Portal",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "const token = pm.collectionVariables.get('accessToken');",
+          "const currentPath = pm.request.url.getPath();",
+          "const isAuthRoute = currentPath.some(segment => segment === 'auth');",
+          "if (!token && !isAuthRoute) {",
+          "  pm.sendRequest({",
+          "    url: pm.collectionVariables.get('baseUrl') + '/auth/login',",
+          "    method: 'POST',",
+          "    header: { 'Content-Type': 'application/json' },",
+          "    body: {",
+          "      mode: 'raw',",
+          "      raw: JSON.stringify({",
+          "        email: pm.collectionVariables.get('loginEmail'),",
+          "        password: pm.collectionVariables.get('loginPassword')",
+          "      })",
+          "    }",
+          "  }, function(err, res) {",
+          "    if (!err && res.code === 200) {",
+          "      const { data } = res.json();",
+          "      pm.collectionVariables.set('accessToken',  data.tokens.access.token);",
+          "      pm.collectionVariables.set('refreshToken', data.tokens.refresh.token);",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl",       "value": "http://localhost:4000/v1" },
+    { "key": "loginEmail",    "value": "admin@invennico.com" },
+    { "key": "loginPassword", "value": "Admin@123456" },
+    { "key": "accessToken",   "value": "" },
+    { "key": "refreshToken",  "value": "" },
+    { "key": "resetToken",    "value": "" },
+    { "key": "targetUserId",  "value": "" },
+    { "key": "targetLeadId",  "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin User\",\n  \"email\": \"admin@invennico.com\",\n  \"password\": \"Admin@123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 201) {",
+                  "  const { data } = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken',  data.tokens.access.token);",
+                  "  pm.collectionVariables.set('refreshToken', data.tokens.refresh.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{loginEmail}}\",\n  \"password\": \"{{loginPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 200) {",
+                  "  const { data } = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken',  data.tokens.access.token);",
+                  "  pm.collectionVariables.set('refreshToken', data.tokens.refresh.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Tokens",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/refresh/tokens", "host": ["{{baseUrl}}"], "path": ["auth", "refresh", "tokens"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 200) {",
+                  "  const { data } = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken',  data.access.token);",
+                  "  pm.collectionVariables.set('refreshToken', data.refresh.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/forgot/password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot", "password"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{loginEmail}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/verify/otp", "host": ["{{baseUrl}}"], "path": ["auth", "verify", "otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{loginEmail}}\",\n  \"otp\": \"123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 200) {",
+                  "  const { data } = pm.response.json();",
+                  "  pm.collectionVariables.set('resetToken', data.resetToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset/password?token={{resetToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset", "password"],
+              "query": [{ "key": "token", "value": "{{resetToken}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewPass@7890\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken',  '');",
+                  "  pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "Get Lead Stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/leads/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "stats"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads/upload/pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "upload", "pdf"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analyze Lead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"E-Commerce Web Portal Development\",\n  \"details\": \"The client wants a fully responsive e-commerce web portal. They need custom product design, shopping cart, payment integration, and shipping API. Preferred stack: React, Node.js, Express, MongoDB.\",\n  \"source\": \"upwork\",\n  \"notes\": \"Initial discussion was positive. Needs urgent proposal.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads/analyze",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "analyze"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generate WhatsApp Draft",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leadId\": \"{{targetLeadId}}\",\n  \"leadSummary\": \"Build a custom CRM platform for managing real estate agents\",\n  \"techStack\": \"Vue.js, Laravel, Postgres\",\n  \"timeline\": \"3 months\",\n  \"budget\": \"$8000\",\n  \"originalLead\": \"Client is looking to build a high performance platform for real estate CRM.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads/whatsapp",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "whatsapp"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Leads",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/leads?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads"],
+              "query": [
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "10" },
+                { "key": "status", "value": "new", "disabled": true },
+                { "key": "source", "value": "upwork", "disabled": true },
+                { "key": "dateRange", "value": "30", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "const { data } = pm.response.json();",
+                  "pm.test('Has results array', () => pm.expect(data.results).to.be.an('array'));",
+                  "if (data.results.length > 0) {",
+                  "  pm.collectionVariables.set('targetLeadId', data.results[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"React Native Fitness Tracker App\",\n  \"details\": \"Client is looking for a cross-platform mobile app to track daily workouts, steps, and meal plans. Integration with Apple Health and Google Fit required.\",\n  \"source\": \"direct\",\n  \"notes\": \"Follow up next Monday\",\n  \"clientContact\": \"john.fitness@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('targetLeadId', pm.response.json().data.lead.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{targetLeadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "{{targetLeadId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"qualified\",\n  \"notes\": \"Client called back, confirmed budget is flexible up to $15k.\",\n  \"tags\": [\"crm-pending\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{targetLeadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "{{targetLeadId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generate Proposal",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"preparedFor\": \"John Fitness Labs\",\n  \"preparedBy\": \"Invennico Sales Representative\",\n  \"scopeDoc\": \"Phase 1: UI/UX Wireframing (2 weeks)\\nPhase 2: Backend Development (4 weeks)\\nPhase 3: Integration and Mobile Apps (4 weeks)\\nPhase 4: UAT and launch (2 weeks)\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{targetLeadId}}/generate/proposal",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "{{targetLeadId}}", "generate", "proposal"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Proposal",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{targetLeadId}}/proposal/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "{{targetLeadId}}", "proposal", "download"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Lead",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/leads/{{targetLeadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["leads", "{{targetLeadId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users (Partner)",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"phone\": \"+91 99999 00000\",\n  \"department\": \"Engineering\",\n  \"location\": \"Bangalore\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile", "avatar"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change My Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/profile/change/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile", "change", "password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Admin@123456\",\n  \"newPassword\": \"NewPass@7890\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users (Admin)",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "10" },
+                { "key": "role",   "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true },
+                { "key": "name",   "value": "", "disabled": true },
+                { "key": "sortBy", "value": "createdAt:desc", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "const { data } = pm.response.json();",
+                  "pm.test('Has results array', () => pm.expect(data.results).to.be.an('array'));",
+                  "if (data.results.length > 0) {",
+                  "  pm.collectionVariables.set('targetUserId', data.results[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{targetUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create User (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Partner\",\n  \"email\": \"john.partner@invennico.com\",\n  \"role\": \"partner\",\n  \"phone\": \"+91 98765 43210\",\n  \"department\": \"Sales\",\n  \"location\": \"Mumbai\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('targetUserId', pm.response.json().data.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{targetUserId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"inactive\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete User (Admin)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{targetUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{targetUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant Credits (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{targetUserId}}/credits",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{targetUserId}}", "credits"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50,\n  \"note\": \"Initial credit allocation\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyBranding\": {\n    \"name\": \"Invennico TechnoLabs Private Limited\",\n    \"tagline\": \"Innovating Digital Products & Platforms\",\n    \"address\": \"702, Pinnacle Tower, Link Road, Mumbai, MH, 400053\",\n    \"email\": \"sales@invennico.com\",\n    \"phone\": \"+91 99999 88888\",\n    \"website\": \"https://invennico.com\"\n  },\n  \"proposalSections\": [\n    { \"key\": \"coverPage\", \"enabled\": true, \"order\": 1 },\n    { \"key\": \"clientBusinessDetails\", \"enabled\": true, \"order\": 2 },\n    { \"key\": \"aboutInvennico\", \"enabled\": true, \"order\": 3 },\n    { \"key\": \"executiveSummary\", \"enabled\": true, \"order\": 4 },\n    { \"key\": \"proposedSolution\", \"enabled\": true, \"order\": 5 },\n    { \"key\": \"scopeOfWork\", \"enabled\": true, \"order\": 6 },\n    { \"key\": \"deliverables\", \"enabled\": true, \"order\": 7 },\n    { \"key\": \"technicalArchitecture\", \"enabled\": true, \"order\": 8 },\n    { \"key\": \"whyChooseUs\", \"enabled\": true, \"order\": 9 },\n    { \"key\": \"assumptions\", \"enabled\": true, \"order\": 10 },\n    { \"key\": \"outOfScope\", \"enabled\": true, \"order\": 11 },\n    { \"key\": \"milestones\", \"enabled\": true, \"order\": 12 },\n    { \"key\": \"clientQuestions\", \"enabled\": true, \"order\": 13 },\n    { \"key\": \"postLaunchSupport\", \"enabled\": true, \"order\": 14 }\n  ],\n  \"pricingConfig\": {\n    \"engineerRates\": {\n      \"intern\": 15,\n      \"junior\": 30,\n      \"midLevel\": 50,\n      \"senior\": 75,\n      \"architect\": 100\n    },\n    \"complexityMultipliers\": {\n      \"low\": 1.0,\n      \"medium\": 1.3,\n      \"high\": 1.6\n    },\n    \"timelineMultipliers\": {\n      \"rush\": 1.4,\n      \"standard\": 1.0,\n      \"extended\": 0.9\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["settings"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
