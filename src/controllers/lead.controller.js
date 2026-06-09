@@ -13,7 +13,7 @@ const createLead = catchAsync(async (req, res) => {
 });
 
 const getLeads = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['status', 'source', 'createdBy', 'dateRange']);
+  const filter = pick(req.query, ['status', 'source', 'createdBy', 'dateRange', 'search']);
   const options = pick(req.query, ['limit', 'page']);
   const result = await leadService.queryLeads(filter, options, req.user);
   res.send({

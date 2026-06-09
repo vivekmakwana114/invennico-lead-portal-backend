@@ -11,4 +11,14 @@ const updateSettings = catchAsync(async (req, res) => {
   res.send({ success: true, message: 'Settings updated successfully', data: { settings } });
 });
 
-module.exports = { getSettings, updateSettings };
+const getPrompt = catchAsync(async (req, res) => {
+  const settings = await settingsService.getSettings();
+  res.send({ success: true, message: 'Prompt fetched successfully', data: { aiPrompt: settings.aiPrompt || '' } });
+});
+
+const updatePrompt = catchAsync(async (req, res) => {
+  const settings = await settingsService.updateSettings({ aiPrompt: req.body.aiPrompt ?? '' });
+  res.send({ success: true, message: 'Prompt updated successfully', data: { aiPrompt: settings.aiPrompt || '' } });
+});
+
+module.exports = { getSettings, updateSettings, getPrompt, updatePrompt };

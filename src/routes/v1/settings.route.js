@@ -11,4 +11,9 @@ router
   .get(auth('manageSettings'), settingsController.getSettings)
   .put(auth('manageSettings'), validate(settingsValidation.updateSettings), settingsController.updateSettings);
 
+router
+  .route('/prompt')
+  .get(auth('manageSettings'), settingsController.getPrompt)
+  .put(auth('manageSettings'), validate(settingsValidation.updatePrompt), settingsController.updatePrompt);
+
 module.exports = router;

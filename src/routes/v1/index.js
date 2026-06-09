@@ -3,6 +3,7 @@ const authRoute = require('./auth.route');
 const userRoute = require('./user.route');
 const leadRoute = require('./lead.route');
 const settingsRoute = require('./settings.route');
+const dashboardRoute = require('./dashboard.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 
@@ -13,6 +14,7 @@ const defaultRoutes = [
   { path: '/users', route: userRoute },
   { path: '/leads', route: leadRoute },
   { path: '/settings', route: settingsRoute },
+  { path: '/dashboard', route: dashboardRoute },
 ];
 
 const devRoutes = [{ path: '/docs', route: docsRoute }];

@@ -1,22 +1,9 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const config = require('../config/config');
 const logger = require('../config/logger');
+const { Settings } = require('../models');
 
-const getClient = () => new Anthropic({ apiKey: config.anthropic.apiKey });
-
-const analyzeLead = async ({ title, details, source, notes, attachments, pdfContent }) => {
-  const inputPayload = {
-    title: title || 'N/A',
-    source: source || 'N/A',
-    details: details || 'N/A',
-    notes: notes || 'None',
-    attachments: attachments || 'None',
-    pdfContent: pdfContent ? `${pdfContent.slice(0, 500)}${pdfContent.length > 500 ? '… [truncated]' : ''}` : 'None',
-  };
-
-  logger.debug('[AI Analyze] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
-
-  const prompt = `You are a senior pre-sales consultant at Invennico TechnoLabs, a digital product development company.
+const DEFAULT_SYSTEM_PROMPT = `You are a senior pre-sales consultant at Invennico TechnoLabs, a digital product development company.
 
 Company context:
 - Digital tech studio building web, mobile, SaaS, AI, and enterprise systems
@@ -25,14 +12,6 @@ Company context:
 - Focus on scalable, practical, production-ready solutions
 
 Analyze the following lead and return ONLY a valid JSON object. No markdown, no explanation, no code fences.
-
-INPUT:
-Title: ${title || 'N/A'}
-Source: ${source || 'N/A'}
-Description: ${details || 'N/A'}
-Internal Notes: ${notes || 'None'}
-Attachments: ${attachments || 'None'}
-PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}
 
 OUTPUT (strict JSON only):
 {
@@ -65,7 +44,35 @@ RULES:
 - Do NOT oversell
 - Keep estimates realistic based on industry standards
 - Think like a CTO + sales strategist
+- Tech stack names must be SHORT and CLEAN — single standard identifiers only (e.g. "React", "Node.js", "PostgreSQL", "AWS", "TypeScript", "Flutter"). No descriptions, no parenthetical notes, no version numbers, no "with X" or "for X" suffixes
 - Return ONLY the JSON object`;
+
+const getClient = () => new Anthropic({ apiKey: config.anthropic.apiKey });
+
+const analyzeLead = async ({ title, details, source, notes, attachments, pdfContent }) => {
+  const inputPayload = {
+    title: title || 'N/A',
+    source: source || 'N/A',
+    details: details || 'N/A',
+    notes: notes || 'None',
+    attachments: attachments || 'None',
+    pdfContent: pdfContent ? `${pdfContent.slice(0, 500)}${pdfContent.length > 500 ? '… [truncated]' : ''}` : 'None',
+  };
+
+  logger.debug('[AI Analyze] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
+
+  const settings = await Settings.findById('global').lean();
+  const instructions = settings?.aiPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+
+  const prompt = `${instructions}
+
+INPUT:
+Title: ${title || 'N/A'}
+Source: ${source || 'N/A'}
+Description: ${details || 'N/A'}
+Internal Notes: ${notes || 'None'}
+Attachments: ${attachments || 'None'}
+PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}`;
 
   const client = getClient();
 

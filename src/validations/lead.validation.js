@@ -66,20 +66,27 @@ const getLeads = {
     source: Joi.string().valid(...SOURCES),
     createdBy: Joi.string().custom(objectId),
     dateRange: Joi.number().valid(7, 30, 90, 180, 0),
+    search: Joi.string().trim().allow('', null),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
   }),
 };
 
+// Accepts MongoDB ObjectId OR "LD-123" display IDs
+const leadIdOrObjectId = (value, helpers) => {
+  if (/^LD-\d+$/i.test(value)) return value;
+  return objectId(value, helpers);
+};
+
 const getLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
 };
 
 const updateLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
   body: Joi.object()
     .keys({
@@ -113,7 +120,7 @@ const updateLead = {
 
 const deleteLead = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
 };
 

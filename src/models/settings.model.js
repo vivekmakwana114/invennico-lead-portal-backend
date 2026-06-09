@@ -88,6 +88,7 @@ const settingsSchema = new mongoose.Schema(
     googleDriveFolderId: { type: String, default: null },
     scopeDocumentContent: { type: String, default: null },
     pricingConfig: { type: pricingConfigSchema, default: () => ({}) },
+    aiPrompt: { type: String, default: '' },
   },
   { timestamps: true }
 );
