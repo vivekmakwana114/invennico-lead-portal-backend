@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
@@ -93,6 +95,52 @@ const uploadAvatar = catchAsync(async (req, res) => {
   });
 });
 
+// ── Shared: delete logo file from disk ───────────────────────────────────────
+const deleteLogoFile = (logoPath) => {
+  if (!logoPath) return;
+  const fsPath = path.join(__dirname, '../../', logoPath.replace(/^\//, ''));
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  if (fs.existsSync(fsPath)) fs.unlinkSync(fsPath);
+};
+
+// ── Any authenticated user: upload own logo ───────────────────────────────────
+const uploadLogo = catchAsync(async (req, res) => {
+  if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded');
+  deleteLogoFile(req.user.logoPath);
+  const logoUrl = `/images/logos/${req.file.filename}`;
+  const user = await userService.updateUserById(req.user.id, { logoPath: logoUrl });
+  res.send({ success: true, message: 'Logo uploaded successfully', data: { user } });
+});
+
+// ── Any authenticated user: remove own logo ───────────────────────────────────
+const removeLogo = catchAsync(async (req, res) => {
+  if (!req.user.logoPath) throw new ApiError(httpStatus.BAD_REQUEST, 'No logo to remove');
+  deleteLogoFile(req.user.logoPath);
+  const user = await userService.updateUserById(req.user.id, { logoPath: null });
+  res.send({ success: true, message: 'Logo removed successfully', data: { user } });
+});
+
+// ── Admin: upload logo for any user ──────────────────────────────────────────
+const adminUploadLogo = catchAsync(async (req, res) => {
+  if (!req.file) throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded');
+  const target = await userService.getUserById(req.params.userId);
+  if (!target) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  deleteLogoFile(target.logoPath);
+  const logoUrl = `/images/logos/${req.file.filename}`;
+  const user = await userService.updateUserById(req.params.userId, { logoPath: logoUrl });
+  res.send({ success: true, message: 'Logo uploaded successfully', data: { user } });
+});
+
+// ── Admin: remove logo for any user ──────────────────────────────────────────
+const adminRemoveLogo = catchAsync(async (req, res) => {
+  const target = await userService.getUserById(req.params.userId);
+  if (!target) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  if (!target.logoPath) throw new ApiError(httpStatus.BAD_REQUEST, 'User has no logo to remove');
+  deleteLogoFile(target.logoPath);
+  const user = await userService.updateUserById(req.params.userId, { logoPath: null });
+  res.send({ success: true, message: 'Logo removed successfully', data: { user } });
+});
+
 // ── Admin: grant or refill credits for a user ────────────────────────────────
 const grantCredits = catchAsync(async (req, res) => {
   const { amount, note } = req.body;
@@ -113,6 +161,10 @@ module.exports = {
   getMe,
   updateMe,
   uploadAvatar,
+  uploadLogo,
+  removeLogo,
+  adminUploadLogo,
+  adminRemoveLogo,
   changePassword,
   grantCredits,
 };

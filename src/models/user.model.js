@@ -64,6 +64,10 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null,
     },
+    logoPath: {
+      type: String,
+      default: null,
+    },
     otp: {
       type: String,
       default: null,

@@ -40,6 +40,7 @@ const downloadProposalTemplate = catchAsync(async (req, res) => {
   const defaultPath = path.resolve(__dirname, '../../templates/proposal-template.docx');
   const filePath = settings.proposalTemplatePath ? path.resolve(settings.proposalTemplatePath) : defaultPath;
 
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!fs.existsSync(filePath)) {
     throw new ApiError(
       httpStatus.NOT_FOUND,

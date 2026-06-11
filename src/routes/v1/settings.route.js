@@ -13,6 +13,7 @@ const router = express.Router();
 
 // ── Multer config for proposal template uploads ────────────────────────────────
 const templateDir = path.join(__dirname, '../../../templates');
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 if (!fs.existsSync(templateDir)) fs.mkdirSync(templateDir, { recursive: true });
 
 const templateStorage = multer.diskStorage({

@@ -17,12 +17,16 @@ const HANDOFF_NOTE =
 function parseTimelineMonths(str) {
   if (!str) return null;
   const s = str.toLowerCase().trim();
+  // eslint-disable-next-line security/detect-unsafe-regex
   const range = s.match(/(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*month/);
   if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
+  // eslint-disable-next-line security/detect-unsafe-regex
   const plus = s.match(/(\d+(?:\.\d+)?)\+\s*month/);
   if (plus) return parseFloat(plus[1]) + 1;
+  // eslint-disable-next-line security/detect-unsafe-regex
   const single = s.match(/(\d+(?:\.\d+)?)\s*month/);
   if (single) return parseFloat(single[1]);
+  // eslint-disable-next-line security/detect-unsafe-regex
   const weeks = s.match(/(\d+(?:\.\d+)?)\s*week/);
   if (weeks) return parseFloat(weeks[1]) / 4;
   return null;
@@ -191,7 +195,9 @@ const queryLeads = async (filter, options, requestingUser) => {
   }
 
   if (filter.search && filter.search.trim()) {
-    const regex = new RegExp(filter.search.trim(), 'i');
+    const escaped = filter.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // eslint-disable-next-line security/detect-non-literal-regexp
+    const regex = new RegExp(escaped, 'i');
     dbFilter.$or = [{ title: regex }, { clientContact: regex }];
   }
 
@@ -327,6 +333,7 @@ const generateWhatsapp = async (body, requestingUser) => {
  */
 const uploadAndExtractPdf = async (file) => {
   if (!file) throw new ApiError(httpStatus.BAD_REQUEST, 'No PDF file uploaded');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const buffer = fs.readFileSync(file.path);
   const parser = new PDFParse({ data: buffer });
   const result = await parser.getText();
@@ -369,6 +376,18 @@ const generateProposal = async (leadId, requestingUser, { preparedFor, preparedB
     enabledSectionKeys,
   });
 
+  let logoBuffer = null;
+  let logoMimeType = null;
+  if (requestingUser.logoPath) {
+    const logoFsPath = path.join(__dirname, '../../', requestingUser.logoPath.replace(/^\//, ''));
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    if (fs.existsSync(logoFsPath)) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      logoBuffer = fs.readFileSync(logoFsPath);
+      logoMimeType = path.extname(logoFsPath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+    }
+  }
+
   const docxBuffer = await proposalService.buildProposalDocx({
     lead,
     aiContent,
@@ -377,14 +396,18 @@ const generateProposal = async (leadId, requestingUser, { preparedFor, preparedB
     preparedBy,
     enabledSections,
     templatePath: settings.proposalTemplatePath || null,
+    logoBuffer,
+    logoMimeType,
   });
 
   // Save .docx to disk in leadproposal/ at repo root
   const outputDir = path.join(__dirname, '../../leadproposal');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   const fileName = `Proposal-LD${lead.leadNumber}-${Date.now()}.docx`;
   const filePath = path.join(outputDir, fileName);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   fs.writeFileSync(filePath, docxBuffer);
 
   const updatedLead = await updateLeadById(
@@ -411,6 +434,7 @@ const downloadProposal = async (leadId, requestingUser) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'No proposal has been generated for this lead yet');
   }
 
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   if (!fs.existsSync(lead.proposalDoc.filePath)) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Proposal file not found on server');
   }
