@@ -1,3 +1,15 @@
 # Convert text file line endings to lf
 * text eol=lf
 *.js text
+
+# Treat Office/binary formats as binary — prevents CRLF corruption
+*.docx binary
+*.doc binary
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.pptx binary
+*.ppt binary
+*.png binary
+*.jpg binary
+*.jpeg binary

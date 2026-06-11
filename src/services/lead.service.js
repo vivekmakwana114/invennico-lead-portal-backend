@@ -376,6 +376,7 @@ const generateProposal = async (leadId, requestingUser, { preparedFor, preparedB
     preparedFor,
     preparedBy,
     enabledSections,
+    templatePath: settings.proposalTemplatePath || null,
   });
 
   // Save .docx to disk in leadproposal/ at repo root

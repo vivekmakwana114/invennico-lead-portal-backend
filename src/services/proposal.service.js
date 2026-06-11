@@ -1,299 +1,150 @@
-const {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  HeadingLevel,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  AlignmentType,
-  BorderStyle,
-  ShadingType,
-} = require('docx');
+const fs = require('fs');
+const path = require('path');
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
 
-// ── Palette ────────────────────────────────────────────────────
-const DARK_BLUE = '003366';
-const MID_BLUE = '0066CC';
-const GREY = '888888';
+// ── Default template path ──────────────────────────────────────────────────────
+// Upload a custom template via POST /v1/settings/proposal/template to override.
+const DEFAULT_TEMPLATE_PATH = path.join(__dirname, '../../templates/proposal-template.docx');
 
-// ── Border used in all tables ──────────────────────────────────
-const TABLE_BORDER = {
-  top: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  left: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  right: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-};
-
-// ── Low-level helpers ──────────────────────────────────────────
-const spacer = () => new Paragraph({ text: '', spacing: { after: 200 } });
-
-const centered = (text, runOpts = {}, spacingAfter = 120) =>
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: spacingAfter },
-    children: [new TextRun({ text: text || '', ...runOpts })],
-  });
-
-const para = (text) =>
-  new Paragraph({
-    children: [new TextRun({ text: text || '', size: 22 })],
-    spacing: { after: 160 },
-  });
-
-const bullet = (text) =>
-  new Paragraph({
-    children: [new TextRun({ text: `•  ${text || ''}`, size: 22 })],
-    indent: { left: 360 },
-    spacing: { after: 80 },
-  });
-
-const numbered = (index, text) =>
-  new Paragraph({
-    children: [new TextRun({ text: `${index + 1}. ${text || ''}`, size: 22 })],
-    indent: { left: 360 },
-    spacing: { after: 80 },
-  });
-
-const h1 = (text) =>
-  new Paragraph({
-    text,
-    heading: HeadingLevel.HEADING_1,
-    pageBreakBefore: true,
-    spacing: { before: 0, after: 200 },
-  });
-
-const h2 = (text) =>
-  new Paragraph({
-    text,
-    heading: HeadingLevel.HEADING_2,
-    spacing: { before: 240, after: 120 },
-  });
-
-// ── Table helpers ──────────────────────────────────────────────
-const headerCell = (text, pct) =>
-  new TableCell({
-    width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
-    shading: { type: ShadingType.CLEAR, fill: DARK_BLUE },
-    borders: TABLE_BORDER,
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text, bold: true, color: 'FFFFFF', size: 20 })],
-      }),
-    ],
-  });
-
-const dataCell = (text, pct) =>
-  new TableCell({
-    width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
-    borders: TABLE_BORDER,
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text: text || '', size: 20 })],
-      }),
-    ],
-  });
-
-// ── Cover page ────────────────────────────────────────────────
-const buildCoverPage = (companyInfo, lead, preparedFor, preparedBy) => {
-  const rows = [
-    new Paragraph({ text: '', spacing: { before: 2200 } }),
-    centered(companyInfo.name || 'Invennico TechnoLabs', { size: 56, bold: true, color: DARK_BLUE }, 160),
-  ];
-
-  if (companyInfo.tagline) {
-    rows.push(centered(companyInfo.tagline, { size: 24, italics: true, color: GREY }, 160));
-  }
-
-  rows.push(
-    new Paragraph({ text: '', spacing: { before: 600 } }),
-    centered('SOFTWARE DEVELOPMENT SCOPE', { size: 36, bold: true, color: MID_BLUE }, 280),
-    centered(lead.title, { size: 30, bold: true }, 280),
-    centered(
-      new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      { size: 22, color: GREY },
-      200
-    ),
-    new Paragraph({ text: '', spacing: { before: 400 } }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({ text: 'Prepared For:  ', size: 22, bold: true }),
-        new TextRun({ text: preparedFor || 'Client', size: 22 }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({ text: 'Prepared By:  ', size: 22, bold: true }),
-        new TextRun({ text: preparedBy || companyInfo.name || 'Invennico TechnoLabs', size: 22 }),
-      ],
-    })
-  );
-
-  if (companyInfo.website) {
-    rows.push(centered(companyInfo.website, { size: 20, color: GREY }, 120));
-  }
-
-  return rows;
-};
-
-// ── Individual section builders (num = display number, e.g. 1, 2, 3…) ────────
-
-const buildClientBusinessDetails = (d = {}, num) => [
-  h1(`${num}. Client Business Details`),
-  h2('Business Overview'),
-  para(d.businessOverview),
-  h2('What the Client Does'),
-  para(d.whatClientDoes),
-  h2('Industry / Domain'),
-  para(d.industryContext),
-  h2('Business Objectives'),
-  para(d.businessObjectives),
-];
-
-const buildAboutInvennico = (text, num) => [h1(`${num}. About Invennico TechnoLabs`), para(text)];
-
-const buildExecutiveSummary = (d = {}, num) => [
-  h1(`${num}. Executive Summary`),
-  h2("Understanding of the Client's Vision"),
-  para(d.visionUnderstanding),
-  h2('Proposed Solution Summary'),
-  para(d.proposedSolution),
-  h2('Key Business Outcomes'),
-  para(d.keyOutcomes),
-  h2('Why This Approach'),
-  para(d.whyThisApproach),
-];
-
-const buildProposedSolution = (d = {}, num) => [
-  h1(`${num}. Proposed Solution`),
-  para(d.overview),
-  ...(d.components || []).map(bullet),
-];
-
-const buildScopeOfWork = (modules = [], num) => [
-  h1(`${num}. Scope of Work`),
-  ...modules.flatMap((mod) => [h2(`${mod.number || ''} ${mod.name || ''}`), para(mod.details)]),
-];
-
-const buildDeliverables = (items = [], num) => [h1(`${num}. Deliverables`), ...items.map(bullet)];
-
-const buildTechnicalArchitecture = (d = {}, num) => [
-  h1(`${num}. Technical Architecture (High-Level)`),
-  h2('Frontend'),
-  para(d.frontend),
-  h2('Backend'),
-  para(d.backend),
-  h2('Database'),
-  para(d.database),
-  h2('Hosting'),
-  para(d.hosting),
-  h2('Integrations'),
-  para(d.integrations),
-  h2('Security'),
-  para(d.security),
-];
-
-const buildWhyChooseUs = (items = [], num) => [h1(`${num}. Why Choose Us?`), ...items.map(bullet)];
-
-const buildAssumptions = (items = [], num) => [h1(`${num}. Assumptions`), ...items.map(bullet)];
-
-const buildOutOfScope = (items = [], num) => [h1(`${num}. Out of Scope`), ...items.map(bullet)];
-
-const buildMilestones = (milestones = [], num) => {
-  const table = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      new TableRow({
-        tableHeader: true,
-        children: [
-          headerCell('Phase', 15),
-          headerCell('Milestone', 25),
-          headerCell('Activities', 45),
-          headerCell('Duration', 15),
-        ],
-      }),
-      ...milestones.map(
-        (m) =>
-          new TableRow({
-            children: [
-              dataCell(m.phase, 15),
-              dataCell(m.milestone, 25),
-              dataCell(m.activities, 45),
-              dataCell(m.duration, 15),
-            ],
-          })
-      ),
-    ],
-  });
-  return [h1(`${num}. Project Milestones & Timelines`), table, spacer()];
-};
-
-const buildClientQuestions = (questions = [], num) => [
-  h1(`${num}. Questions for Client`),
-  ...questions.map((q, i) => numbered(i, q)),
-];
-
-const buildPostLaunchSupport = (d = {}, num) => [
-  h1(`${num}. Post-Launch Support`),
-  h2('Included Support'),
-  ...(d.includedSupport || []).map(bullet),
-  h2('Warranty Period'),
-  para(d.warrantyPeriod || '30 days'),
-  h2('Optional Retainer'),
-  ...(d.optionalRetainer || []).map(bullet),
-];
-
-// ── Dispatch map — key matches settings.proposalSections[].key ────────────────
-const SECTION_BUILDERS = {
-  clientBusinessDetails: (c, num) => buildClientBusinessDetails(c.clientBusinessDetails, num),
-  aboutInvennico: (c, num) => buildAboutInvennico(c.aboutInvennico, num),
-  executiveSummary: (c, num) => buildExecutiveSummary(c.executiveSummary, num),
-  proposedSolution: (c, num) => buildProposedSolution(c.proposedSolution, num),
-  scopeOfWork: (c, num) => buildScopeOfWork(c.scopeOfWork, num),
-  deliverables: (c, num) => buildDeliverables(c.deliverables, num),
-  technicalArchitecture: (c, num) => buildTechnicalArchitecture(c.technicalArchitecture, num),
-  whyChooseUs: (c, num) => buildWhyChooseUs(c.whyChooseUs, num),
-  assumptions: (c, num) => buildAssumptions(c.assumptions, num),
-  outOfScope: (c, num) => buildOutOfScope(c.outOfScope, num),
-  milestones: (c, num) => buildMilestones(c.milestones, num),
-  clientQuestions: (c, num) => buildClientQuestions(c.clientQuestions, num),
-  postLaunchSupport: (c, num) => buildPostLaunchSupport(c.postLaunchSupport, num),
-};
-
-// ── Main export ───────────────────────────────────────────────
-/**
- * Builds a .docx buffer from AI-generated content.
- * enabledSections: array of { key, enabled, order } already filtered+sorted by the caller.
- * Section numbers are assigned sequentially (1, 2, 3…) based on their position in enabledSections.
- */
-const buildProposalDocx = async ({ lead, aiContent, companyInfo, preparedFor, preparedBy, enabledSections }) => {
+// ── Helper: build the flat data object for docxtemplater ──────────────────────
+const buildTemplateData = (aiContent, companyInfo, lead, preparedFor, preparedBy, enabledSectionKeys) => {
   const c = aiContent || {};
-  const children = [];
+  const enabledSet = new Set(enabledSectionKeys || []);
+  const arr = (a) => (Array.isArray(a) ? a : []);
+  const str = (s) => (Array.isArray(s) ? s.join(', ') : s || '');
 
-  // Cover page is optional — included only when its section is enabled
-  const coverEnabled = enabledSections.some((s) => s.key === 'coverPage');
-  if (coverEnabled) {
-    children.push(...buildCoverPage(companyInfo, lead, preparedFor, preparedBy));
+  return {
+    // Meta / cover
+    company_name: companyInfo.name || 'Invennico TechnoLabs',
+    company_tagline: companyInfo.tagline || '',
+    company_website: companyInfo.website || '',
+    company_email: companyInfo.email || '',
+    company_phone: companyInfo.phone || '',
+    prepared_for: preparedFor || '',
+    prepared_by: preparedBy || '',
+    date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    lead_title: lead.title || '',
+
+    // Section visibility flags — controlled by Settings proposalSections[].enabled
+    show_clientBusinessDetails: enabledSet.has('clientBusinessDetails'),
+    show_aboutInvennico: enabledSet.has('aboutInvennico'),
+    show_executiveSummary: enabledSet.has('executiveSummary'),
+    show_proposedSolution: enabledSet.has('proposedSolution'),
+    show_scopeOfWork: enabledSet.has('scopeOfWork'),
+    show_deliverables: enabledSet.has('deliverables'),
+    show_technicalArchitecture: enabledSet.has('technicalArchitecture'),
+    show_whyChooseUs: enabledSet.has('whyChooseUs'),
+    show_assumptions: enabledSet.has('assumptions'),
+    show_outOfScope: enabledSet.has('outOfScope'),
+    show_milestones: enabledSet.has('milestones'),
+    show_clientQuestions: enabledSet.has('clientQuestions'),
+    show_postLaunchSupport: enabledSet.has('postLaunchSupport'),
+
+    // Client business details
+    client_overview: c.clientBusinessDetails?.businessOverview || '',
+    client_what: c.clientBusinessDetails?.whatClientDoes || '',
+    client_industry: c.clientBusinessDetails?.industryContext || '',
+    client_objectives: c.clientBusinessDetails?.businessObjectives || '',
+
+    // About company
+    about_invennico: c.aboutInvennico || '',
+
+    // Executive summary
+    exec_vision: c.executiveSummary?.visionUnderstanding || '',
+    exec_solution: c.executiveSummary?.proposedSolution || '',
+    exec_outcomes: str(c.executiveSummary?.keyOutcomes),
+    exec_why: c.executiveSummary?.whyThisApproach || '',
+
+    // Proposed solution
+    proposed_solution: c.proposedSolution?.overview || '',
+    solution_components: arr(c.proposedSolution?.components).map((component) => ({ component })),
+
+    // Scope of work
+    scope_items: arr(c.scopeOfWork).map((s) => ({
+      scope_num: s.number || '',
+      scope_name: s.name || '',
+      scope_details: s.details || '',
+    })),
+
+    // Deliverables
+    deliverables: arr(c.deliverables).map((item) => ({ item })),
+
+    // Technical architecture
+    tech_frontend: str(c.technicalArchitecture?.frontend),
+    tech_backend: str(c.technicalArchitecture?.backend),
+    tech_database: str(c.technicalArchitecture?.database),
+    tech_hosting: str(c.technicalArchitecture?.hosting),
+    tech_integrations: str(c.technicalArchitecture?.integrations),
+    tech_security: c.technicalArchitecture?.security || '',
+
+    // Why choose us
+    why_choose_us: arr(c.whyChooseUs).map((item) => ({ item })),
+
+    // Assumptions / out of scope
+    assumptions: arr(c.assumptions).map((item) => ({ item })),
+    out_of_scope: arr(c.outOfScope).map((item) => ({ item })),
+
+    // Milestones
+    milestones: arr(c.milestones).map((m) => ({
+      phase: m.phase || '',
+      milestone: m.milestone || '',
+      activities: m.activities || '',
+      duration: m.duration || '',
+    })),
+
+    // Client questions
+    client_questions: arr(c.clientQuestions).map((item) => ({ item })),
+
+    // Post-launch support
+    post_launch_warranty: c.postLaunchSupport?.warrantyPeriod || '',
+    included_support: arr(c.postLaunchSupport?.includedSupport).map((item) => ({ item })),
+    optional_retainer: arr(c.postLaunchSupport?.optionalRetainer).map((item) => ({ item })),
+  };
+};
+
+const buildProposalDocxLegacy = async () => {
+  throw new Error('No proposal template configured. Upload a template in the setting -> proposal template tab');
+};
+
+// ── Template-based DOCX builder ───────────────────────────────────────────────
+/**
+ * Builds a .docx buffer by filling a Word template with AI-generated content.
+ *
+ * Template placeholders: see templates/proposal-template.docx and scripts/generate-default-template.js
+ * Upload a custom template via POST /v1/settings/proposal/template
+ *
+ * Falls back to the legacy programmatic builder if no template is configured
+ * or the template file is not found on disk.
+ *
+ * enabledSections: array of { key, enabled, order } from Settings.
+ *   In template mode — enabled flag drives show_* boolean flags in the template.
+ *   Section ORDER is determined by the template file's physical layout.
+ *   In legacy mode — both enabled and order are fully respected (existing behavior).
+ */
+const buildProposalDocx = async ({
+  lead,
+  aiContent,
+  companyInfo,
+  preparedFor,
+  preparedBy,
+  enabledSections,
+  templatePath,
+}) => {
+  const tplPath = templatePath || DEFAULT_TEMPLATE_PATH;
+  const enabledSectionKeys = (enabledSections || []).filter((s) => s.enabled).map((s) => s.key);
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  if (tplPath && fs.existsSync(tplPath)) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const content = fs.readFileSync(tplPath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+    doc.render(buildTemplateData(aiContent, companyInfo, lead, preparedFor, preparedBy, enabledSectionKeys));
+    return doc.getZip().generate({ type: 'nodebuffer' });
   }
 
-  // Numbered sections — skip coverPage (handled above), assign sequential numbers
-  let sectionNum = 0;
-  enabledSections.forEach((section) => {
-    if (section.key === 'coverPage') return;
-    const builder = SECTION_BUILDERS[section.key];
-    if (builder) {
-      sectionNum += 1;
-      children.push(...builder(c, sectionNum));
-    }
-  });
-
-  const doc = new Document({ sections: [{ children }] });
-  return Packer.toBuffer(doc);
+  return buildProposalDocxLegacy({ lead, aiContent, companyInfo, preparedFor, preparedBy, enabledSections });
 };
 
 module.exports = { buildProposalDocx };
