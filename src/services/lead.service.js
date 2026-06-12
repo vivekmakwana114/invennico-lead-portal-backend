@@ -149,6 +149,11 @@ const createLead = async (userId, leadBody) => {
     leadBody.timeline = mapped.timeline;
   }
 
+  if (leadBody.pdfFileName) {
+    // eslint-disable-next-line no-param-reassign
+    leadBody.pdfFile = { fileName: leadBody.pdfFileName, originalName: leadBody.pdfOriginalName || leadBody.pdfFileName };
+  }
+
   const auditLog = [
     { label: 'Lead submitted to portal', actor: 'System' },
     { label: `Lead assigned to ${user.name}`, actor: user.name },
@@ -442,6 +447,25 @@ const downloadProposal = async (leadId, requestingUser) => {
   return { filePath: lead.proposalDoc.filePath, fileName: lead.proposalDoc.fileName };
 };
 
+/**
+ * Return the file path for a lead's uploaded PDF so it can be streamed inline.
+ */
+const getLeadPdf = async (leadId, requestingUser) => {
+  const lead = await getLeadById(leadId, requestingUser);
+
+  if (!lead.pdfFile?.fileName) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'No PDF attachment found for this lead');
+  }
+
+  const filePath = path.join(__dirname, '../../projectpdf', lead.pdfFile.fileName);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  if (!fs.existsSync(filePath)) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'PDF file not found on server');
+  }
+
+  return { filePath, originalName: lead.pdfFile.originalName };
+};
+
 module.exports = {
   createLead,
   queryLeads,
@@ -454,4 +478,5 @@ module.exports = {
   uploadAndExtractPdf,
   generateProposal,
   downloadProposal,
+  getLeadPdf,
 };

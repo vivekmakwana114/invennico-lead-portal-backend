@@ -48,6 +48,8 @@ router
   .patch(auth(), validate(leadValidation.updateLead), leadController.updateLead)
   .delete(auth(), validate(leadValidation.deleteLead), leadController.deleteLead);
 
+router.get('/:leadId/pdf', auth(), validate(leadValidation.getLead), leadController.viewLeadPdf);
+
 router.post(
   '/:leadId/generate/proposal',
   auth(),

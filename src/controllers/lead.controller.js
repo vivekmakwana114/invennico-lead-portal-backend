@@ -79,6 +79,13 @@ const downloadProposal = catchAsync(async (req, res) => {
   res.sendFile(filePath);
 });
 
+const viewLeadPdf = catchAsync(async (req, res) => {
+  const { filePath, originalName } = await leadService.getLeadPdf(req.params.leadId, req.user);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
+  res.sendFile(filePath);
+});
+
 module.exports = {
   createLead,
   getLeads,
@@ -91,4 +98,5 @@ module.exports = {
   uploadPdf,
   generateProposal,
   downloadProposal,
+  viewLeadPdf,
 };

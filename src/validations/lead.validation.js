@@ -58,6 +58,8 @@ const createLead = {
     timeline: Joi.string().allow('', null),
     whatsappDraft: Joi.string().allow('', null),
     pdfContent: Joi.string().allow('', null),
+    pdfFileName: Joi.string().allow('', null),
+    pdfOriginalName: Joi.string().allow('', null),
   }),
 };
 
