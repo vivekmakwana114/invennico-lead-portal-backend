@@ -59,6 +59,11 @@ const leadSchema = mongoose.Schema(
       default: [],
     },
 
+    pdfFile: {
+      fileName: { type: String, default: null },
+      originalName: { type: String, default: null },
+    },
+
     clientContact: {
       type: String,
       default: null,
