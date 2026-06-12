@@ -9,9 +9,9 @@ const DEFAULT_TEMPLATE_PATH = path.join(__dirname, '../../templates/proposal-tem
 
 const HDR_REL_ID = 'rId_logo_hdr';
 const HDR_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
-// Max display box for the logo: 10 cm × 10 cm (360000 EMU per cm)
-const MAX_LOGO_CX = 3600000;
-const MAX_LOGO_CY = 3600000;
+// Max display box for the logo: 8 cm × 8 cm (360000 EMU per cm)
+const MAX_LOGO_CX = 2880000;
+const MAX_LOGO_CY = 2880000;
 
 // Parse pixel dimensions from a PNG or JPEG buffer without any external dependency.
 const getImageDimensions = (buffer, mimeType) => {
@@ -134,6 +134,39 @@ const patchDocumentXml = (zip) => {
   zip.file('word/document.xml', docXml);
 };
 
+// Ensure the page top margin is tall enough to clear the injected logo on every page.
+// cy is the logo height in EMU (914400 EMU = 1 inch = 1440 twips).
+// Only the LAST w:pgMar (main body section) is patched — the cover-page section is left
+// untouched so its layout does not shift and create a blank second page.
+const patchPageTopMargin = (zip, cy) => {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+  const docXml = docFile.asText();
+
+  const logoTwips = Math.round((cy * 1440) / 914400);
+
+  // Find the last <w:pgMar (main body section's margin element)
+  const lastPgMarIdx = docXml.lastIndexOf('<w:pgMar');
+  if (lastPgMarIdx === -1) return;
+  const closeIdx = docXml.indexOf('/>', lastPgMarIdx);
+  if (closeIdx === -1) return;
+
+  const pgMarTag = docXml.slice(lastPgMarIdx, closeIdx + 2);
+
+  // Read w:header from this specific pgMar; fall back to 708 twips (0.5 inch)
+  const headerDistMatch = pgMarTag.match(/\bw:header="(\d+)"/);
+  const headerDist = headerDistMatch ? parseInt(headerDistMatch[1], 10) : 708;
+  // 0.5 cm gap between logo bottom and body text (~283 twips)
+  const requiredTop = headerDist + logoTwips + 283;
+
+  const patchedTag = pgMarTag.replace(/\bw:top="(\d+)"/, (_m, existingTop) => {
+    const newTop = Math.max(parseInt(existingTop, 10), requiredTop);
+    return `w:top="${newTop}"`;
+  });
+
+  zip.file('word/document.xml', docXml.slice(0, lastPgMarIdx) + patchedTag + docXml.slice(closeIdx + 2));
+};
+
 const injectLogoIntoHeader = (docxBuffer, logoBuffer, mimeType) => {
   const zip = new PizZip(docxBuffer);
   const ext = mimeType === 'image/png' ? 'png' : 'jpg';
@@ -171,6 +204,9 @@ const injectLogoIntoHeader = (docxBuffer, logoBuffer, mimeType) => {
         zip.file('word/header1.xml', hdrXml);
       }
 
+      // Ensure page top margin clears the logo on every page
+      patchPageTopMargin(zip, cy);
+
       return zip.generate({ type: 'nodebuffer' });
     }
   }
@@ -183,6 +219,7 @@ const injectLogoIntoHeader = (docxBuffer, logoBuffer, mimeType) => {
   patchContentTypes(zip, ext, mimeType);
   patchDocumentRels(zip);
   patchDocumentXml(zip);
+  patchPageTopMargin(zip, cy);
 
   return zip.generate({ type: 'nodebuffer' });
 };
@@ -244,42 +281,58 @@ const buildTemplateData = (aiContent, companyInfo, lead, preparedFor, preparedBy
     scope_items: arr(c.scopeOfWork).map((s) => ({
       scope_num: s.number || '',
       scope_name: s.name || '',
-      scope_details: s.details || '',
+      scope_description: s.description || '',
+      scope_objective: s.objective || '',
+      scope_groups: arr(s.scopeIncludes).map((g) => ({
+        group_title: g.groupTitle || '',
+        group_items: arr(g.items).map((item) => ({ item })),
+      })),
     })),
 
     // Deliverables
-    deliverables: arr(c.deliverables).map((item) => ({ item })),
+    deliverables: arr(c.deliverables).map((g) => ({
+      deliverable_group_title: g.groupTitle || '',
+      deliverable_items: arr(g.items).map((item) => ({ item })),
+    })),
 
     // Technical architecture
-    tech_frontend: str(c.technicalArchitecture?.frontend),
-    tech_backend: str(c.technicalArchitecture?.backend),
-    tech_database: str(c.technicalArchitecture?.database),
-    tech_hosting: str(c.technicalArchitecture?.hosting),
-    tech_integrations: str(c.technicalArchitecture?.integrations),
-    tech_security: c.technicalArchitecture?.security || '',
+    tech_groups: arr(c.technicalArchitecture).map((g) => ({
+      tech_group_title: g.groupTitle || '',
+      tech_items: arr(g.items).map((item) => ({ item })),
+    })),
 
     // Why choose us
-    why_choose_us: arr(c.whyChooseUs).map((item) => ({ item })),
+    why_choose_us: arr(c.whyChooseUs).map((w) => ({
+      why_title: w.title || '',
+      why_description: w.description || '',
+      why_items: arr(w.items).map((item) => ({ item })),
+    })),
 
     // Assumptions / out of scope
-    assumptions: arr(c.assumptions).map((item) => ({ item })),
-    out_of_scope: arr(c.outOfScope).map((item) => ({ item })),
+    assumptions: arr(c.assumptions).map((g) => ({
+      assumption_group_title: g.groupTitle || '',
+      assumption_items: arr(g.items).map((item) => ({ item })),
+    })),
+    out_of_scope: arr(c.outOfScope).map((g) => ({
+      oos_group_title: g.groupTitle || '',
+      oos_items: arr(g.items).map((item) => ({ item })),
+    })),
 
     // Milestones
     milestones: arr(c.milestones).map((m) => ({
       phase: m.phase || '',
       milestone: m.milestone || '',
-      activities: m.activities || '',
+      milestone_activities: arr(m.activities).map((item) => ({ item })),
       duration: m.duration || '',
     })),
 
-    // Client questions
-    client_questions: arr(c.clientQuestions).map((item) => ({ item })),
-
     // Post-launch support
-    post_launch_warranty: c.postLaunchSupport?.warrantyPeriod || '',
+    post_launch_intro: c.postLaunchSupport?.intro || '',
     included_support: arr(c.postLaunchSupport?.includedSupport).map((item) => ({ item })),
+    post_launch_warranty: c.postLaunchSupport?.warrantyDescription || '',
+    post_launch_retainer_intro: c.postLaunchSupport?.retainerIntro || '',
     optional_retainer: arr(c.postLaunchSupport?.optionalRetainer).map((item) => ({ item })),
+    post_launch_retainer_closing: c.postLaunchSupport?.retainerClosing || '',
   };
 };
 
@@ -307,7 +360,11 @@ const buildProposalDocx = async ({
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const content = fs.readFileSync(tplPath, 'binary');
     const zip = new PizZip(content);
-    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => '',
+    });
     doc.render(buildTemplateData(aiContent, companyInfo, lead, preparedFor, preparedBy, enabledSectionKeys));
 
     let docxBuffer = doc.getZip().generate({ type: 'nodebuffer' });

@@ -237,10 +237,6 @@ const generateProposalContent = async ({
     },
     aiAnalysis: {
       summary: lead.analysis?.summary || null,
-      qualificationScore: lead.analysis?.qualification?.score ?? null,
-      qualificationLabel: lead.analysis?.qualification?.label || null,
-      qualificationReasoning: lead.analysis?.qualification?.description || null,
-      recommendedNextAction: lead.analysis?.qualification?.nextAction || null,
       techStack: {
         frontend: techStack.frontend || [],
         backend: techStack.backend || [],
@@ -248,7 +244,6 @@ const generateProposalContent = async ({
         integrations: techStack.integrations || [],
         hosting: techStack.hosting || [],
       },
-      suggestedQuestions: lead.analysis?.suggestedQuestions || [],
     },
     estimation: {
       timeline: lead.estimation?.timeline || null,
@@ -259,102 +254,100 @@ const generateProposalContent = async ({
         costRange: m.costRange,
       })),
     },
-    enabledSections: enabledSectionKeys || [],
     scopeDocumentTemplate: scopeDocumentContent || null,
     additionalContext: scopeDoc || null,
   };
 
-  logger.debug('[AI Proposal] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
+  logger.debug('[AI Proposal] Input payload:\n%s', JSON.stringify(inputPayload, null, 2));
 
   const companyName = companyInfo.name || 'Invennico TechnoLabs';
 
+  // clientQuestions is intentionally excluded — the template carries a static placeholder for the client to fill in.
+  const sectionsToGenerate = (enabledSectionKeys || []).filter((k) => k !== 'clientQuestions');
+
   const prompt = `You are a senior pre-sales consultant at ${companyName}, a digital product development company.
 
-Generate a complete, professional software development scope proposal based on the input data below. Return ONLY a valid JSON object — no markdown, no code fences, no extra text.
+Generate a professional software development proposal based on the input data below. Return ONLY a valid JSON object — no markdown, no code fences, no extra text.
 
 INPUT DATA:
 ${JSON.stringify(inputPayload, null, 2)}
 
-Generate exactly this JSON structure. All keys are required. Draw all facts from INPUT DATA — do not invent business details or numbers.
+Generate exactly this JSON structure. Draw all facts from INPUT DATA — do not invent business details or numbers.
 
 {
   "clientBusinessDetails": {
-    "businessOverview": "2-3 sentence paragraph about the client's business based on lead details",
-    "whatClientDoes": "1-2 sentences on their core product or service",
-    "industryContext": "1-2 sentences on the industry and domain",
-    "businessObjectives": "2-3 sentences on their goals for this project"
+    "businessOverview": "2 sentences about the client's business",
+    "whatClientDoes": "1 sentence on their core product or service",
+    "industryContext": "1 sentence on the industry and domain",
+    "businessObjectives": "2 sentences on their goals for this project"
   },
-  "aboutInvennico": "3-4 sentence standard company introduction for ${companyName} — highlight strengths in web, mobile, SaaS, AI, and enterprise delivery",
+  "aboutInvennico": "3 sentences introducing ${companyName} — highlight strengths in web, mobile, SaaS, AI, and enterprise delivery",
   "executiveSummary": {
-    "visionUnderstanding": "2-3 sentences summarising what the client wants to achieve",
-    "proposedSolution": "2-3 sentences describing the solution we are proposing",
-    "keyOutcomes": "2-3 sentences on the measurable business outcomes",
-    "whyThisApproach": "2-3 sentences justifying the technical and delivery approach"
+    "visionUnderstanding": "2 sentences on what the client wants to achieve",
+    "proposedSolution": "2 sentences on the solution being proposed",
+    "keyOutcomes": "2 sentences on measurable business outcomes",
+    "whyThisApproach": "2 sentences justifying the technical and delivery approach"
   },
   "proposedSolution": {
-    "overview": "2-3 sentence high-level description of the system architecture and its purpose",
-    "components": ["Component 1", "Component 2", "Component 3"]
+    "overview": "2 sentences on system architecture and purpose",
+    "components": ["Component 1", "Component 2", "Component 3", "Component 4"]
   },
   "scopeOfWork": [
-    { "number": "5.1", "name": "Module Name", "details": "3-5 sentences of detailed functional requirements for this module" }
+    {
+      "number": "2.1",
+      "name": "Module Name",
+      "description": "1 sentence module introduction",
+      "scopeIncludes": [
+        { "groupTitle": "Group Name", "items": ["Feature 1", "Feature 2", "Feature 3"] }
+      ],
+      "objective": "1 sentence objective"
+    }
   ],
-  "deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"],
-  "technicalArchitecture": {
-    "frontend": "1-2 sentences on frontend technology choices and rationale",
-    "backend": "1-2 sentences on backend technology choices and rationale",
-    "database": "1-2 sentences on database choices and rationale",
-    "hosting": "1-2 sentences on hosting and infrastructure",
-    "integrations": "1-2 sentences on third-party integrations planned",
-    "security": "1-2 sentences on security approach and practices"
-  },
+  "deliverables": [
+    { "groupTitle": "Group Name", "items": ["Item 1", "Item 2", "Item 3"] }
+  ],
+  "technicalArchitecture": [
+    { "groupTitle": "Layer Name", "items": ["Tech 1", "Tech 2", "Tech 3"] }
+  ],
   "whyChooseUs": [
-    "Strength 1: explanation tailored to this project",
-    "Strength 2: explanation tailored to this project",
-    "Strength 3: explanation tailored to this project",
-    "Strength 4: explanation tailored to this project",
-    "Strength 5: explanation tailored to this project"
+    {
+      "title": "Strength title",
+      "description": "1 sentence explanation (omit or empty string if using items only)",
+      "items": ["Bullet point 1", "Bullet point 2", "Bullet point 3"]
+    }
   ],
   "assumptions": [
-    "Assumption 1",
-    "Assumption 2",
-    "Assumption 3",
-    "Assumption 4",
-    "Assumption 5"
+    { "groupTitle": "Category Name", "items": ["Assumption 1", "Assumption 2", "Assumption 3"] }
   ],
   "outOfScope": [
-    "Out of scope item 1",
-    "Out of scope item 2",
-    "Out of scope item 3",
-    "Out of scope item 4",
-    "Out of scope item 5"
+    { "groupTitle": "Category Name", "items": ["Item 1", "Item 2", "Item 3"] }
   ],
   "milestones": [
-    { "phase": "Phase name", "milestone": "Milestone name", "activities": "Key activities description", "duration": "X weeks" }
-  ],
-  "clientQuestions": [
-    "Question 1?",
-    "Question 2?",
-    "Question 3?",
-    "Question 4?",
-    "Question 5?"
+    { "phase": "Phase name", "milestone": "Milestone name", "activities": ["Activity 1", "Activity 2", "Activity 3"], "duration": "X weeks" }
   ],
   "postLaunchSupport": {
-    "includedSupport": ["Support item 1", "Support item 2", "Support item 3"],
-    "warrantyPeriod": "30 days",
-    "optionalRetainer": ["Retainer item 1", "Retainer item 2", "Retainer item 3", "Retainer item 4"]
+    "intro": "1 sentence on post-launch support purpose",
+    "includedSupport": ["Item 1", "Item 2", "Item 3", "Item 4"],
+    "warrantyDescription": "2 sentences on warranty period and what it covers",
+    "retainerIntro": "1 sentence introducing optional ongoing support",
+    "optionalRetainer": ["Item 1", "Item 2", "Item 3", "Item 4", "Item 5"],
+    "retainerClosing": "1 sentence on SLA and commercials agreed separately"
   }
 }
 
-SECTIONS TO GENERATE (in this exact order): ${(enabledSectionKeys || []).join(', ')}
-Only include keys listed above. Omit any key NOT in this list from the output JSON.
+SECTIONS TO GENERATE: ${sectionsToGenerate.join(', ')}
+Omit any key NOT in the list above.
 
 RULES:
-- scopeOfWork: generate 6-12 modules appropriate for this project type
-- milestones: use estimation data if provided; otherwise generate 4-6 realistic phases with Phase, Milestone, Activities, Duration columns
-- clientQuestions: 5-10 smart questions to reduce implementation risk
-- whyChooseUs: 5 strong points tailored to this specific project type
-- outOfScope: at least 5 items not explicitly included in the lead details
-- Professional tone, no emojis, no markdown syntax inside string values
+- scopeOfWork: 5-7 modules; max 2 groups per module; max 4 items per group; 1 sentence each for description and objective
+- deliverables: 4-5 groups; max 5 items per group; items are short phrases not sentences
+- technicalArchitecture: 5 groups (Frontend, Backend, Database, Hosting, Security); max 4 short tech names per group
+- whyChooseUs: exactly 5 items; each has title + description or items (or both); max 3 bullet items per point
+- assumptions: 2-3 groups; max 4 items per group
+- outOfScope: 2-3 groups; max 4 items per group; total at least 5 items
+- milestones: 4-5 phases; max 4 activities per phase; activities are short phrases not sentences
+- proposedSolution.components: max 5 items
+- Professional tone, no emojis, no markdown inside string values
 - Return ONLY the JSON object`;
 
   const client = getClient();
