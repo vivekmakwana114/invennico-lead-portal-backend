@@ -64,6 +64,10 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null,
     },
+    logoPath: {
+      type: String,
+      default: null,
+    },
     otp: {
       type: String,
       default: null,
@@ -110,7 +114,6 @@ userSchema.pre('save', async function () {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(this.password, 8);
   }
-  // next();
 });
 
 const User = mongoose.model('User', userSchema);

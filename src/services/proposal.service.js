@@ -1,299 +1,382 @@
-const {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  HeadingLevel,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  AlignmentType,
-  BorderStyle,
-  ShadingType,
-} = require('docx');
+const fs = require('fs');
+const path = require('path');
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
 
-// ── Palette ────────────────────────────────────────────────────
-const DARK_BLUE = '003366';
-const MID_BLUE = '0066CC';
-const GREY = '888888';
+const DEFAULT_TEMPLATE_PATH = path.join(__dirname, '../../templates/proposal-template.docx');
 
-// ── Border used in all tables ──────────────────────────────────
-const TABLE_BORDER = {
-  top: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  left: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-  right: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-};
+// ── Logo header injection ─────────────────────────────────────────────────────
 
-// ── Low-level helpers ──────────────────────────────────────────
-const spacer = () => new Paragraph({ text: '', spacing: { after: 200 } });
+const HDR_REL_ID = 'rId_logo_hdr';
+const HDR_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+// Max display box for the logo: 8 cm × 8 cm (360000 EMU per cm)
+const MAX_LOGO_CX = 2880000;
+const MAX_LOGO_CY = 2880000;
 
-const centered = (text, runOpts = {}, spacingAfter = 120) =>
-  new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: spacingAfter },
-    children: [new TextRun({ text: text || '', ...runOpts })],
-  });
-
-const para = (text) =>
-  new Paragraph({
-    children: [new TextRun({ text: text || '', size: 22 })],
-    spacing: { after: 160 },
-  });
-
-const bullet = (text) =>
-  new Paragraph({
-    children: [new TextRun({ text: `•  ${text || ''}`, size: 22 })],
-    indent: { left: 360 },
-    spacing: { after: 80 },
-  });
-
-const numbered = (index, text) =>
-  new Paragraph({
-    children: [new TextRun({ text: `${index + 1}. ${text || ''}`, size: 22 })],
-    indent: { left: 360 },
-    spacing: { after: 80 },
-  });
-
-const h1 = (text) =>
-  new Paragraph({
-    text,
-    heading: HeadingLevel.HEADING_1,
-    pageBreakBefore: true,
-    spacing: { before: 0, after: 200 },
-  });
-
-const h2 = (text) =>
-  new Paragraph({
-    text,
-    heading: HeadingLevel.HEADING_2,
-    spacing: { before: 240, after: 120 },
-  });
-
-// ── Table helpers ──────────────────────────────────────────────
-const headerCell = (text, pct) =>
-  new TableCell({
-    width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
-    shading: { type: ShadingType.CLEAR, fill: DARK_BLUE },
-    borders: TABLE_BORDER,
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text, bold: true, color: 'FFFFFF', size: 20 })],
-      }),
-    ],
-  });
-
-const dataCell = (text, pct) =>
-  new TableCell({
-    width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
-    borders: TABLE_BORDER,
-    children: [
-      new Paragraph({
-        children: [new TextRun({ text: text || '', size: 20 })],
-      }),
-    ],
-  });
-
-// ── Cover page ────────────────────────────────────────────────
-const buildCoverPage = (companyInfo, lead, preparedFor, preparedBy) => {
-  const rows = [
-    new Paragraph({ text: '', spacing: { before: 2200 } }),
-    centered(companyInfo.name || 'Invennico TechnoLabs', { size: 56, bold: true, color: DARK_BLUE }, 160),
-  ];
-
-  if (companyInfo.tagline) {
-    rows.push(centered(companyInfo.tagline, { size: 24, italics: true, color: GREY }, 160));
-  }
-
-  rows.push(
-    new Paragraph({ text: '', spacing: { before: 600 } }),
-    centered('SOFTWARE DEVELOPMENT SCOPE', { size: 36, bold: true, color: MID_BLUE }, 280),
-    centered(lead.title, { size: 30, bold: true }, 280),
-    centered(
-      new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      { size: 22, color: GREY },
-      200
-    ),
-    new Paragraph({ text: '', spacing: { before: 400 } }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({ text: 'Prepared For:  ', size: 22, bold: true }),
-        new TextRun({ text: preparedFor || 'Client', size: 22 }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({ text: 'Prepared By:  ', size: 22, bold: true }),
-        new TextRun({ text: preparedBy || companyInfo.name || 'Invennico TechnoLabs', size: 22 }),
-      ],
-    })
-  );
-
-  if (companyInfo.website) {
-    rows.push(centered(companyInfo.website, { size: 20, color: GREY }, 120));
-  }
-
-  return rows;
-};
-
-// ── Individual section builders (num = display number, e.g. 1, 2, 3…) ────────
-
-const buildClientBusinessDetails = (d = {}, num) => [
-  h1(`${num}. Client Business Details`),
-  h2('Business Overview'),
-  para(d.businessOverview),
-  h2('What the Client Does'),
-  para(d.whatClientDoes),
-  h2('Industry / Domain'),
-  para(d.industryContext),
-  h2('Business Objectives'),
-  para(d.businessObjectives),
-];
-
-const buildAboutInvennico = (text, num) => [h1(`${num}. About Invennico TechnoLabs`), para(text)];
-
-const buildExecutiveSummary = (d = {}, num) => [
-  h1(`${num}. Executive Summary`),
-  h2("Understanding of the Client's Vision"),
-  para(d.visionUnderstanding),
-  h2('Proposed Solution Summary'),
-  para(d.proposedSolution),
-  h2('Key Business Outcomes'),
-  para(d.keyOutcomes),
-  h2('Why This Approach'),
-  para(d.whyThisApproach),
-];
-
-const buildProposedSolution = (d = {}, num) => [
-  h1(`${num}. Proposed Solution`),
-  para(d.overview),
-  ...(d.components || []).map(bullet),
-];
-
-const buildScopeOfWork = (modules = [], num) => [
-  h1(`${num}. Scope of Work`),
-  ...modules.flatMap((mod) => [h2(`${mod.number || ''} ${mod.name || ''}`), para(mod.details)]),
-];
-
-const buildDeliverables = (items = [], num) => [h1(`${num}. Deliverables`), ...items.map(bullet)];
-
-const buildTechnicalArchitecture = (d = {}, num) => [
-  h1(`${num}. Technical Architecture (High-Level)`),
-  h2('Frontend'),
-  para(d.frontend),
-  h2('Backend'),
-  para(d.backend),
-  h2('Database'),
-  para(d.database),
-  h2('Hosting'),
-  para(d.hosting),
-  h2('Integrations'),
-  para(d.integrations),
-  h2('Security'),
-  para(d.security),
-];
-
-const buildWhyChooseUs = (items = [], num) => [h1(`${num}. Why Choose Us?`), ...items.map(bullet)];
-
-const buildAssumptions = (items = [], num) => [h1(`${num}. Assumptions`), ...items.map(bullet)];
-
-const buildOutOfScope = (items = [], num) => [h1(`${num}. Out of Scope`), ...items.map(bullet)];
-
-const buildMilestones = (milestones = [], num) => {
-  const table = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      new TableRow({
-        tableHeader: true,
-        children: [
-          headerCell('Phase', 15),
-          headerCell('Milestone', 25),
-          headerCell('Activities', 45),
-          headerCell('Duration', 15),
-        ],
-      }),
-      ...milestones.map(
-        (m) =>
-          new TableRow({
-            children: [
-              dataCell(m.phase, 15),
-              dataCell(m.milestone, 25),
-              dataCell(m.activities, 45),
-              dataCell(m.duration, 15),
-            ],
-          })
-      ),
-    ],
-  });
-  return [h1(`${num}. Project Milestones & Timelines`), table, spacer()];
-};
-
-const buildClientQuestions = (questions = [], num) => [
-  h1(`${num}. Questions for Client`),
-  ...questions.map((q, i) => numbered(i, q)),
-];
-
-const buildPostLaunchSupport = (d = {}, num) => [
-  h1(`${num}. Post-Launch Support`),
-  h2('Included Support'),
-  ...(d.includedSupport || []).map(bullet),
-  h2('Warranty Period'),
-  para(d.warrantyPeriod || '30 days'),
-  h2('Optional Retainer'),
-  ...(d.optionalRetainer || []).map(bullet),
-];
-
-// ── Dispatch map — key matches settings.proposalSections[].key ────────────────
-const SECTION_BUILDERS = {
-  clientBusinessDetails: (c, num) => buildClientBusinessDetails(c.clientBusinessDetails, num),
-  aboutInvennico: (c, num) => buildAboutInvennico(c.aboutInvennico, num),
-  executiveSummary: (c, num) => buildExecutiveSummary(c.executiveSummary, num),
-  proposedSolution: (c, num) => buildProposedSolution(c.proposedSolution, num),
-  scopeOfWork: (c, num) => buildScopeOfWork(c.scopeOfWork, num),
-  deliverables: (c, num) => buildDeliverables(c.deliverables, num),
-  technicalArchitecture: (c, num) => buildTechnicalArchitecture(c.technicalArchitecture, num),
-  whyChooseUs: (c, num) => buildWhyChooseUs(c.whyChooseUs, num),
-  assumptions: (c, num) => buildAssumptions(c.assumptions, num),
-  outOfScope: (c, num) => buildOutOfScope(c.outOfScope, num),
-  milestones: (c, num) => buildMilestones(c.milestones, num),
-  clientQuestions: (c, num) => buildClientQuestions(c.clientQuestions, num),
-  postLaunchSupport: (c, num) => buildPostLaunchSupport(c.postLaunchSupport, num),
-};
-
-// ── Main export ───────────────────────────────────────────────
-/**
- * Builds a .docx buffer from AI-generated content.
- * enabledSections: array of { key, enabled, order } already filtered+sorted by the caller.
- * Section numbers are assigned sequentially (1, 2, 3…) based on their position in enabledSections.
- */
-const buildProposalDocx = async ({ lead, aiContent, companyInfo, preparedFor, preparedBy, enabledSections }) => {
-  const c = aiContent || {};
-  const children = [];
-
-  // Cover page is optional — included only when its section is enabled
-  const coverEnabled = enabledSections.some((s) => s.key === 'coverPage');
-  if (coverEnabled) {
-    children.push(...buildCoverPage(companyInfo, lead, preparedFor, preparedBy));
-  }
-
-  // Numbered sections — skip coverPage (handled above), assign sequential numbers
-  let sectionNum = 0;
-  enabledSections.forEach((section) => {
-    if (section.key === 'coverPage') return;
-    const builder = SECTION_BUILDERS[section.key];
-    if (builder) {
-      sectionNum += 1;
-      children.push(...builder(c, sectionNum));
+// Parse pixel dimensions from a PNG or JPEG buffer without any external dependency.
+const getImageDimensions = (buffer, mimeType) => {
+  try {
+    if (mimeType === 'image/png') {
+      // PNG IHDR is always at byte 8; width at 16-19, height at 20-23 (big-endian)
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
     }
+    // JPEG: walk segments starting after SOI (FF D8)
+    let offset = 2;
+    while (offset + 3 < buffer.length) {
+      if (buffer[offset] !== 0xff) break;
+      const marker = buffer[offset + 1];
+      const segLen = buffer.readUInt16BE(offset + 2); // includes its own 2 bytes
+      // SOF markers: C0-C3, C5-C7, C9-CB, CD-CF (skip C4=DHT, C8=JPG, CC=DAC)
+      if (
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf)
+      ) {
+        return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+      }
+      offset += 2 + segLen;
+    }
+  } catch (_) {
+    // ignore parse failures — caller will use fallback dimensions
+  }
+  return null;
+};
+
+// Fit the logo inside MAX_LOGO_CX × MAX_LOGO_CY while preserving aspect ratio.
+const calcLogoEmu = (width, height) => {
+  let cx = Math.round((MAX_LOGO_CY * width) / height);
+  let cy = MAX_LOGO_CY;
+  if (cx > MAX_LOGO_CX) {
+    cx = MAX_LOGO_CX;
+    cy = Math.round((MAX_LOGO_CX * height) / width);
+  }
+  return { cx, cy };
+};
+
+const buildHeaderXml = (cx, cy) =>
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<w:hdr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"` +
+  ` xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"` +
+  ` xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+  `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:drawing>` +
+  `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
+  `<wp:extent cx="${cx}" cy="${cy}"/>` +
+  `<wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+  `<wp:docPr id="1" name="logo_header"/>` +
+  `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+  `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+  `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+  `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+  `<pic:nvPicPr>` +
+  `<pic:cNvPr id="1" name="logo_header"/>` +
+  `<pic:cNvPicPr><a:picLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></pic:cNvPicPr>` +
+  `</pic:nvPicPr>` +
+  `<pic:blipFill>` +
+  `<a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="rId1"/>` +
+  `<a:stretch xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:fillRect/></a:stretch>` +
+  `</pic:blipFill>` +
+  `<pic:spPr>` +
+  `<a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+  `<a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><a:avLst/></a:prstGeom>` +
+  `</pic:spPr>` +
+  `</pic:pic></a:graphicData></a:graphic>` +
+  `</wp:inline></w:drawing></w:r></w:p></w:hdr>`;
+
+const buildHeaderRels = (mediaFilename) =>
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+  `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaFilename}"/>` +
+  `</Relationships>`;
+
+const HDR_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+
+const patchContentTypes = (zip, ext, mimeType) => {
+  const ctXml = zip.file('[Content_Types].xml').asText();
+  let patched = ctXml;
+  if (!patched.includes(`Extension="${ext}"`)) {
+    patched = patched.replace('</Types>', `<Default Extension="${ext}" ContentType="${mimeType}"/></Types>`);
+  }
+  if (!patched.includes('header1.xml')) {
+    patched = patched.replace(
+      '</Types>',
+      `<Override PartName="/word/header1.xml" ContentType="${HDR_CONTENT_TYPE}"/></Types>`
+    );
+  }
+  zip.file('[Content_Types].xml', patched);
+};
+
+const patchDocumentRels = (zip) => {
+  const relsFile = zip.file('word/_rels/document.xml.rels');
+  if (!relsFile) return;
+  let relsXml = relsFile.asText();
+  relsXml = relsXml.replace(/<Relationship[^>]*Id="rId_logo_hdr"[^/]*\/>/g, '');
+  relsXml = relsXml.replace(
+    '</Relationships>',
+    `<Relationship Id="${HDR_REL_ID}" Type="${HDR_REL_TYPE}" Target="header1.xml"/></Relationships>`
+  );
+  zip.file('word/_rels/document.xml.rels', relsXml);
+};
+
+const patchDocumentXml = (zip) => {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+  let docXml = docFile.asText();
+  // Remove any existing default header reference regardless of attribute order
+  docXml = docXml.replace(/<w:headerReference[^>]*w:type="default"[^/]*\/>/g, '');
+  // Insert our header reference before the last </w:sectPr>
+  const insertPos = docXml.lastIndexOf('</w:sectPr>');
+  if (insertPos === -1) return;
+  // eslint-disable-next-line prefer-template
+  docXml = `${docXml.slice(0, insertPos)}<w:headerReference w:type="default" r:id="${HDR_REL_ID}"/>${docXml.slice(
+    insertPos
+  )}`;
+  zip.file('word/document.xml', docXml);
+};
+
+// Ensure the page top margin is tall enough to clear the injected logo on every page.
+// cy is the logo height in EMU (914400 EMU = 1 inch = 1440 twips).
+// Only the LAST w:pgMar (main body section) is patched — the cover-page section is left
+// untouched so its layout does not shift and create a blank second page.
+const patchPageTopMargin = (zip, cy) => {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+  const docXml = docFile.asText();
+
+  const logoTwips = Math.round((cy * 1440) / 914400);
+
+  // Find the last <w:pgMar (main body section's margin element)
+  const lastPgMarIdx = docXml.lastIndexOf('<w:pgMar');
+  if (lastPgMarIdx === -1) return;
+  const closeIdx = docXml.indexOf('/>', lastPgMarIdx);
+  if (closeIdx === -1) return;
+
+  const pgMarTag = docXml.slice(lastPgMarIdx, closeIdx + 2);
+
+  // Read w:header from this specific pgMar; fall back to 708 twips (0.5 inch)
+  const headerDistMatch = pgMarTag.match(/\bw:header="(\d+)"/);
+  const headerDist = headerDistMatch ? parseInt(headerDistMatch[1], 10) : 708;
+  // 0.5 cm gap between logo bottom and body text (~283 twips)
+  const requiredTop = headerDist + logoTwips + 283;
+
+  const patchedTag = pgMarTag.replace(/\bw:top="(\d+)"/, (_m, existingTop) => {
+    const newTop = Math.max(parseInt(existingTop, 10), requiredTop);
+    return `w:top="${newTop}"`;
   });
 
-  const doc = new Document({ sections: [{ children }] });
-  return Packer.toBuffer(doc);
+  zip.file('word/document.xml', docXml.slice(0, lastPgMarIdx) + patchedTag + docXml.slice(closeIdx + 2));
+};
+
+const injectLogoIntoHeader = (docxBuffer, logoBuffer, mimeType) => {
+  const zip = new PizZip(docxBuffer);
+  const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+  const logoBase64 = logoBuffer.toString('base64');
+  const dims = getImageDimensions(logoBuffer, mimeType);
+  const { cx, cy } = dims && dims.width > 0 ? calcLogoEmu(dims.width, dims.height) : { cx: MAX_LOGO_CX, cy: MAX_LOGO_CY };
+
+  // Strategy 1: Template already has a header with an image — replace only the image bytes
+  // and update the display dimensions to match the new logo's aspect ratio.
+  const headerRelsFile = zip.file('word/_rels/header1.xml.rels');
+  if (headerRelsFile) {
+    const headerRelsXml = headerRelsFile.asText();
+    const imgMatch = headerRelsXml.match(/<Relationship\b[^>]*\bType="[^"]*\/relationships\/image"[^>]*\bTarget="([^"]+)"/);
+    if (imgMatch) {
+      const existingTarget = imgMatch[1]; // e.g. "../media/image1.jpg"
+      const existingRelPath = existingTarget.replace(/^\.\.\//, ''); // "media/image1.jpg"
+      const existingFullPath = `word/${existingRelPath}`; // "word/media/image1.jpg"
+      const existingExt = existingRelPath.split('.').pop().toLowerCase(); // "jpg"
+
+      if (existingExt === ext) {
+        zip.file(existingFullPath, logoBase64, { base64: true });
+      } else {
+        const newRelPath = `media/logo_header.${ext}`;
+        zip.file(`word/${newRelPath}`, logoBase64, { base64: true });
+        zip.file('word/_rels/header1.xml.rels', headerRelsXml.replace(existingTarget, `../${newRelPath}`));
+        patchContentTypes(zip, ext, mimeType);
+      }
+
+      // Patch wp:extent and a:ext in header1.xml to match actual logo aspect ratio
+      const headerFile = zip.file('word/header1.xml');
+      if (headerFile) {
+        let hdrXml = headerFile.asText();
+        hdrXml = hdrXml.replace(/(<wp:extent cx=")[^"]*(" cy=")[^"]*(")/g, `$1${cx}$2${cy}$3`);
+        hdrXml = hdrXml.replace(/(<a:ext cx=")[^"]*(" cy=")[^"]*(")/g, `$1${cx}$2${cy}$3`);
+        zip.file('word/header1.xml', hdrXml);
+      }
+
+      // Ensure page top margin clears the logo on every page
+      patchPageTopMargin(zip, cy);
+
+      return zip.generate({ type: 'nodebuffer' });
+    }
+  }
+
+  // Strategy 2 (fallback): Template has no header image — inject a fresh header with the logo.
+  const mediaFilename = `logo_header.${ext}`;
+  zip.file(`word/media/${mediaFilename}`, logoBase64, { base64: true });
+  zip.file('word/header1.xml', buildHeaderXml(cx, cy));
+  zip.file('word/_rels/header1.xml.rels', buildHeaderRels(mediaFilename));
+  patchContentTypes(zip, ext, mimeType);
+  patchDocumentRels(zip);
+  patchDocumentXml(zip);
+  patchPageTopMargin(zip, cy);
+
+  return zip.generate({ type: 'nodebuffer' });
+};
+
+// ── Template data builder ─────────────────────────────────────────────────────
+const buildTemplateData = (aiContent, companyInfo, lead, preparedFor, preparedBy, enabledSectionKeys) => {
+  const c = aiContent || {};
+  const enabledSet = new Set(enabledSectionKeys || []);
+  const arr = (a) => (Array.isArray(a) ? a : []);
+  const str = (s) => (Array.isArray(s) ? s.join(', ') : s || '');
+
+  return {
+    // Meta / cover
+    company_name: companyInfo.name || 'Invennico TechnoLabs',
+    company_tagline: companyInfo.tagline || '',
+    company_website: companyInfo.website || '',
+    company_email: companyInfo.email || '',
+    company_phone: companyInfo.phone || '',
+    prepared_for: preparedFor || '',
+    prepared_by: preparedBy || '',
+    date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    lead_title: lead.title || '',
+
+    // Section visibility flags — controlled by Settings proposalSections[].enabled
+    show_clientBusinessDetails: enabledSet.has('clientBusinessDetails'),
+    show_aboutInvennico: enabledSet.has('aboutInvennico'),
+    show_executiveSummary: enabledSet.has('executiveSummary'),
+    show_proposedSolution: enabledSet.has('proposedSolution'),
+    show_scopeOfWork: enabledSet.has('scopeOfWork'),
+    show_deliverables: enabledSet.has('deliverables'),
+    show_technicalArchitecture: enabledSet.has('technicalArchitecture'),
+    show_whyChooseUs: enabledSet.has('whyChooseUs'),
+    show_assumptions: enabledSet.has('assumptions'),
+    show_outOfScope: enabledSet.has('outOfScope'),
+    show_milestones: enabledSet.has('milestones'),
+    show_clientQuestions: enabledSet.has('clientQuestions'),
+    show_postLaunchSupport: enabledSet.has('postLaunchSupport'),
+
+    // Client business details
+    client_overview: c.clientBusinessDetails?.businessOverview || '',
+    client_what: c.clientBusinessDetails?.whatClientDoes || '',
+    client_industry: c.clientBusinessDetails?.industryContext || '',
+    client_objectives: c.clientBusinessDetails?.businessObjectives || '',
+
+    // About company
+    about_invennico: c.aboutInvennico || '',
+
+    // Executive summary
+    exec_vision: c.executiveSummary?.visionUnderstanding || '',
+    exec_solution: c.executiveSummary?.proposedSolution || '',
+    exec_outcomes: str(c.executiveSummary?.keyOutcomes),
+    exec_why: c.executiveSummary?.whyThisApproach || '',
+
+    // Proposed solution
+    proposed_solution: c.proposedSolution?.overview || '',
+    solution_components: arr(c.proposedSolution?.components).map((component) => ({ component })),
+
+    // Scope of work
+    scope_items: arr(c.scopeOfWork).map((s) => ({
+      scope_num: s.number || '',
+      scope_name: s.name || '',
+      scope_description: s.description || '',
+      scope_objective: s.objective || '',
+      scope_groups: arr(s.scopeIncludes).map((g) => ({
+        group_title: g.groupTitle || '',
+        group_items: arr(g.items).map((item) => ({ item })),
+      })),
+    })),
+
+    // Deliverables
+    deliverables: arr(c.deliverables).map((g) => ({
+      deliverable_group_title: g.groupTitle || '',
+      deliverable_items: arr(g.items).map((item) => ({ item })),
+    })),
+
+    // Technical architecture
+    tech_groups: arr(c.technicalArchitecture).map((g) => ({
+      tech_group_title: g.groupTitle || '',
+      tech_items: arr(g.items).map((item) => ({ item })),
+    })),
+
+    // Why choose us
+    why_choose_us: arr(c.whyChooseUs).map((w) => ({
+      why_title: w.title || '',
+      why_description: w.description || '',
+      why_items: arr(w.items).map((item) => ({ item })),
+    })),
+
+    // Assumptions / out of scope
+    assumptions: arr(c.assumptions).map((g) => ({
+      assumption_group_title: g.groupTitle || '',
+      assumption_items: arr(g.items).map((item) => ({ item })),
+    })),
+    out_of_scope: arr(c.outOfScope).map((g) => ({
+      oos_group_title: g.groupTitle || '',
+      oos_items: arr(g.items).map((item) => ({ item })),
+    })),
+
+    // Milestones
+    milestones: arr(c.milestones).map((m) => ({
+      phase: m.phase || '',
+      milestone: m.milestone || '',
+      milestone_activities: arr(m.activities).map((item) => ({ item })),
+      duration: m.duration || '',
+    })),
+
+    // Post-launch support
+    post_launch_intro: c.postLaunchSupport?.intro || '',
+    included_support: arr(c.postLaunchSupport?.includedSupport).map((item) => ({ item })),
+    post_launch_warranty: c.postLaunchSupport?.warrantyDescription || '',
+    post_launch_retainer_intro: c.postLaunchSupport?.retainerIntro || '',
+    optional_retainer: arr(c.postLaunchSupport?.optionalRetainer).map((item) => ({ item })),
+    post_launch_retainer_closing: c.postLaunchSupport?.retainerClosing || '',
+  };
+};
+
+const buildProposalDocxLegacy = async () => {
+  throw new Error('No proposal template configured. Upload a template in the setting -> proposal template tab');
+};
+
+// ── Template-based DOCX builder ───────────────────────────────────────────────
+const buildProposalDocx = async ({
+  lead,
+  aiContent,
+  companyInfo,
+  preparedFor,
+  preparedBy,
+  enabledSections,
+  templatePath,
+  logoBuffer,
+  logoMimeType,
+}) => {
+  const tplPath = templatePath || DEFAULT_TEMPLATE_PATH;
+  const enabledSectionKeys = (enabledSections || []).filter((s) => s.enabled).map((s) => s.key);
+
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  if (tplPath && fs.existsSync(tplPath)) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const content = fs.readFileSync(tplPath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => '',
+    });
+    doc.render(buildTemplateData(aiContent, companyInfo, lead, preparedFor, preparedBy, enabledSectionKeys));
+
+    let docxBuffer = doc.getZip().generate({ type: 'nodebuffer' });
+
+    if (logoBuffer && logoMimeType) {
+      docxBuffer = injectLogoIntoHeader(docxBuffer, logoBuffer, logoMimeType);
+    }
+
+    return docxBuffer;
+  }
+
+  return buildProposalDocxLegacy({ lead, aiContent, companyInfo, preparedFor, preparedBy, enabledSections });
 };
 
 module.exports = { buildProposalDocx };

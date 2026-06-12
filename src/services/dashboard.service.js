@@ -133,7 +133,7 @@ const getStats = async (requestingUser, { dateRange = 'year' } = {}) => {
   const baseFilter = buildBaseFilter(requestingUser, dateRange);
   const pipelineFilter = {
     ...baseFilter,
-    status: { $in: ['qualified', 'engagement-started', 'proposal-sent', 'won'] },
+    status: 'qualified',
     budget: { $ne: null },
   };
 

@@ -11,6 +11,7 @@ const router = express.Router();
 
 // Multer — PDF upload to projectpdf/ at repo root
 const uploadDir = path.join(__dirname, '../../../projectpdf');
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const pdfStorage = multer.diskStorage({
