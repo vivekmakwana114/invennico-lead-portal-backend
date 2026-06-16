@@ -4,8 +4,10 @@ const fs = require('fs');
 const { PDFParse } = require('pdf-parse');
 const { Lead } = require('../models');
 const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
 const userService = require('./user.service');
 const aiService = require('./ai.service');
+const geminiService = require('./gemini.service');
 const proposalService = require('./proposal.service');
 const settingsService = require('./settings.service');
 
@@ -116,16 +118,27 @@ const createLead = async (userId, leadBody) => {
 
   // Run AI analysis server-side when the caller hasn't pre-supplied it
   if (leadBody.isAnalyzed && !leadBody.analysis?.summary) {
-    const aiData = await aiService.analyzeLead({
+    const leadInput = {
       title: leadBody.title,
       details: leadBody.details,
       source: leadBody.source,
       notes: leadBody.notes,
+      clientContact: leadBody.clientContact || null,
       attachments: Array.isArray(leadBody.attachments) ? leadBody.attachments.join(', ') : null,
       pdfContent: leadBody.pdfContent || null,
-    });
+    };
 
-    const mapped = mapAiResponse(aiData);
+    // Fire Claude and Gemini in parallel; Gemini failure must not block lead creation
+    const [claudeResult, geminiResult] = await Promise.allSettled([
+      aiService.analyzeLead(leadInput),
+      geminiService.researchLead(leadInput),
+    ]);
+
+    if (claudeResult.status === 'rejected') {
+      throw claudeResult.reason;
+    }
+
+    const mapped = mapAiResponse(claudeResult.value);
     const aiBudgetRange = mapped.estimation.budgetRange;
 
     const settings = await settingsService.getSettings();
@@ -147,6 +160,13 @@ const createLead = async (userId, leadBody) => {
     leadBody.budget = pricingBudget || mapped.budget;
     // eslint-disable-next-line no-param-reassign
     leadBody.timeline = mapped.timeline;
+
+    if (geminiResult.status === 'fulfilled') {
+      // eslint-disable-next-line no-param-reassign
+      leadBody.leadResearch = { ...geminiResult.value, generatedAt: new Date() };
+    } else {
+      logger.warn('[Gemini Research] Failed for lead "%s": %s', leadBody.title, geminiResult.reason?.message);
+    }
   }
 
   if (leadBody.pdfFileName) {

@@ -10,7 +10,3 @@ yarn-error.log
 
 # Code coverage
 coverage
-
-# Generated proposal documents
-leadproposal/
-projectpdf/

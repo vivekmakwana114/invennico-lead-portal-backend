@@ -146,6 +146,43 @@ const leadSchema = mongoose.Schema(
       generatedAt: { type: Date, default: null },
     },
 
+    leadResearch: {
+      client: {
+        name: { type: String, default: null },
+        company: { type: String, default: null },
+        location: { type: String, default: null },
+        industry: { type: String, default: null },
+        companySize: { type: String, default: null },
+        businessDescription: { type: String, default: null },
+      },
+      platform: {
+        source: { type: String, default: null },
+        postingContext: { type: String, default: null },
+        urgencyLevel: { type: String, default: null },
+        typicalBudgetRange: { type: String, default: null },
+      },
+      projectStatus: {
+        phase: { type: String, default: null },
+        decisionTimeline: { type: String, default: null },
+        competitiveLandscape: { type: String, default: null },
+      },
+      budget: {
+        stated: { type: String, default: null },
+        estimatedRange: { type: String, default: null },
+        currency: { type: String, default: null },
+        paymentPreference: { type: String, default: null },
+      },
+      coreRequirements: {
+        summary: { type: String, default: null },
+        features: { type: [String], default: [] },
+        technicalConstraints: { type: [String], default: [] },
+        integrations: { type: [String], default: [] },
+        platforms: { type: [String], default: [] },
+      },
+      researchInsights: { type: [String], default: [] },
+      generatedAt: { type: Date, default: null },
+    },
+
     zoho: {
       status: { type: String, default: null },
       crmId: { type: String, default: null },

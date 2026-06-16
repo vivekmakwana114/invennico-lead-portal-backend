@@ -18,6 +18,7 @@ const envVarsSchema = Joi.object()
     SMTP_PASSWORD: Joi.string().description('password for email server'),
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     ANTHROPIC_API_KEY: Joi.string().description('Anthropic API key for lead analysis and WhatsApp reply generation'),
+    GEMINI_API_KEY: Joi.string().description('Google Gemini API key for lead research with web grounding'),
     ENCRYPTION_KEY: Joi.string().description('32-char AES-256 key for encrypting integration API keys in settings'),
     GOOGLE_SERVICE_ACCOUNT_KEY: Joi.string().description('Google service account JSON (stringified) for Drive uploads'),
     GOOGLE_DRIVE_FOLDER_ID: Joi.string().description('Fallback Google Drive folder ID for proposal uploads'),
@@ -57,6 +58,9 @@ module.exports = {
   },
   anthropic: {
     apiKey: envVars.ANTHROPIC_API_KEY,
+  },
+  gemini: {
+    apiKey: envVars.GEMINI_API_KEY,
   },
   encryption: {
     key: envVars.ENCRYPTION_KEY,
