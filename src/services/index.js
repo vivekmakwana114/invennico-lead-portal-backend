@@ -4,5 +4,6 @@ module.exports.tokenService = require('./token.service');
 module.exports.userService = require('./user.service');
 module.exports.leadService = require('./lead.service');
 module.exports.aiService = require('./ai.service');
+module.exports.geminiService = require('./gemini.service');
 module.exports.settingsService = require('./settings.service');
 module.exports.dashboardService = require('./dashboard.service');

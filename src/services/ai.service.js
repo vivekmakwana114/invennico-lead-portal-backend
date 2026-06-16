@@ -52,16 +52,25 @@ RULES:
 const getClient = () => new Anthropic({ apiKey: config.anthropic.apiKey });
 
 const analyzeLead = async ({ title, details, source, notes, attachments, pdfContent }) => {
-  const inputPayload = {
-    title: title || 'N/A',
-    source: source || 'N/A',
-    details: details || 'N/A',
-    notes: notes || 'None',
-    attachments: attachments || 'None',
-    pdfContent: pdfContent ? `${pdfContent.slice(0, 500)}${pdfContent.length > 500 ? '… [truncated]' : ''}` : 'None',
-  };
-
-  logger.debug('[AI Analyze] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
+  // Log preview only — pdfContent capped at 500 chars here for readability.
+  // The actual prompt sent to Claude below contains the FULL pdfContent.
+  logger.debug(
+    '[AI Analyze] Lead input preview (pdfContent capped at 500 chars for log):\n%s',
+    JSON.stringify(
+      {
+        title: title || 'N/A',
+        source: source || 'N/A',
+        details: details || 'N/A',
+        notes: notes || 'None',
+        attachments: attachments || 'None',
+        pdfContent: pdfContent
+          ? `${pdfContent.slice(0, 500)}${pdfContent.length > 500 ? '… [truncated for log]' : ''}`
+          : 'None',
+      },
+      null,
+      2
+    )
+  );
 
   const settings = await Settings.findById('global').lean();
   const persona = settings?.aiPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
@@ -80,10 +89,10 @@ PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}`;
 
   const client = getClient();
 
-  logger.debug('[AI Analyze] Calling Claude — model: claude-haiku-4-5-20251001, max_tokens: 4096');
+  logger.debug('[AI Analyze] Calling Claude — model: claude-haiku-4-5, max_tokens: 4096');
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -190,10 +199,10 @@ Do NOT sound robotic.`;
     logger.debug('[AI WhatsApp] Mode: first generation');
   }
 
-  logger.debug('[AI WhatsApp] Calling Claude — model: claude-haiku-4-5-20251001, max_tokens: 1024');
+  logger.debug('[AI WhatsApp] Calling Claude — model: claude-haiku-4-5, max_tokens: 1024');
 
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-haiku-4-5',
     max_tokens: 1024,
     messages,
   });
