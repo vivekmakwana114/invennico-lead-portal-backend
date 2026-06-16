@@ -24,7 +24,12 @@ const researchLead = async ({ title, details, source, notes, clientContact, pdfC
     useGrounding ? 'ENABLED (live web search)' : 'DISABLED (training knowledge only)'
   );
 
-  const requestConfig = {};
+  // thinkingBudget:0 disables internal reasoning on this thinking model.
+  // Without it, gemini-2.5-flash-lite spends all token budget on invisible
+  // reasoning and returns finishReason:STOP with empty output.
+  const requestConfig = {
+    thinkingConfig: { thinkingBudget: 0 },
+  };
   if (useGrounding) {
     requestConfig.tools = [{ googleSearch: {} }];
   }
@@ -103,11 +108,17 @@ RULES:
 
   logger.debug('[Gemini Research] Calling gemini-2.5-flash-lite for lead: %s', title);
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite',
-    contents: prompt,
-    config: requestConfig,
-  });
+  let response;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-lite',
+      contents: prompt,
+      config: requestConfig,
+    });
+    if (response.text) break;
+    logger.warn('[Gemini Research] Attempt %d returned empty — retrying…', attempt);
+  }
 
   // New SDK: response.text is a direct property that correctly handles grounding
   // metadata parts alongside text parts — no manual part extraction needed.
