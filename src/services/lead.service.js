@@ -34,6 +34,30 @@ function parseTimelineMonths(str) {
   return null;
 }
 
+function parseBudgetRange(str) {
+  if (!str) return null;
+  const numbers = str.replace(/,/g, '').match(/\d+/g);
+  if (!numbers || numbers.length < 2) return null;
+  return { lo: parseInt(numbers[0], 10), hi: parseInt(numbers[1], 10) };
+}
+
+function scaleMilestoneCosts(milestones, aiTotalRange, pricingTotalRange) {
+  const ai = parseBudgetRange(aiTotalRange);
+  const pricing = parseBudgetRange(pricingTotalRange);
+  if (!ai || !pricing || ai.lo === 0 || ai.hi === 0) return milestones;
+
+  const loScale = pricing.lo / ai.lo;
+  const hiScale = pricing.hi / ai.hi;
+
+  return milestones.map((m) => {
+    const cost = parseBudgetRange(m.costRange);
+    if (!cost) return m;
+    const scaledLo = Math.round((cost.lo * loScale) / 1000) * 1000;
+    const scaledHi = Math.round((cost.hi * hiScale) / 1000) * 1000;
+    return { ...m, costRange: `$${scaledLo.toLocaleString()} - $${scaledHi.toLocaleString()}` };
+  });
+}
+
 function computePricingBudget(estimation, qualificationScore, pricingConfig) {
   if (!pricingConfig) return null;
   const { engineerRates, complexityMultipliers, timelineMultipliers } = pricingConfig;
@@ -148,11 +172,17 @@ const createLead = async (userId, leadBody) => {
       settings.pricingConfig
     );
 
+    const scaledMilestones =
+      pricingBudget && aiBudgetRange
+        ? scaleMilestoneCosts(mapped.estimation.milestones, aiBudgetRange, pricingBudget)
+        : mapped.estimation.milestones;
+
     // eslint-disable-next-line no-param-reassign
     leadBody.analysis = mapped.analysis;
     // eslint-disable-next-line no-param-reassign
     leadBody.estimation = {
       ...mapped.estimation,
+      milestones: scaledMilestones,
       aiBudgetRange,
       budgetRange: pricingBudget || aiBudgetRange,
     };
