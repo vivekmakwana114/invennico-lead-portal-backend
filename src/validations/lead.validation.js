@@ -75,9 +75,9 @@ const getLeads = {
   }),
 };
 
-// Accepts MongoDB ObjectId OR "LD-123" display IDs
+// Accepts MongoDB ObjectId OR any leadId format: LD-1, LD-S-1, LD-VIV-2
 const leadIdOrObjectId = (value, helpers) => {
-  if (/^LD-\d+$/i.test(value)) return value;
+  if (/^LD(-[A-Za-z]+)?-\d+$/i.test(value)) return value;
   return objectId(value, helpers);
 };
 
@@ -141,7 +141,7 @@ const analyzeLead = {
 
 const generateWhatsapp = {
   body: Joi.object().keys({
-    leadId: Joi.string().custom(objectId),
+    leadId: Joi.string().custom(leadIdOrObjectId),
     leadSummary: Joi.string().allow('', null),
     techStack: Joi.string().allow('', null),
     timeline: Joi.string().allow('', null),
@@ -154,7 +154,7 @@ const generateWhatsapp = {
 
 const generateProposal = {
   params: Joi.object().keys({
-    leadId: Joi.string().custom(objectId).required(),
+    leadId: Joi.string().custom(leadIdOrObjectId).required(),
   }),
   body: Joi.object().keys({
     preparedFor: Joi.string().allow('', null),

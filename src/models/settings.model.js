@@ -89,7 +89,21 @@ const settingsSchema = new mongoose.Schema(
     scopeDocumentContent: { type: String, default: null },
     proposalTemplatePath: { type: String, default: null },
     pricingConfig: { type: pricingConfigSchema, default: () => ({}) },
+    // Legacy single-prompt field — kept for backward compat; new code reads aiPrompts.*
     aiPrompt: { type: String, default: '' },
+    aiPrompts: {
+      type: new mongoose.Schema(
+        {
+          leadAnalysis: { type: String, default: '' },
+          whatsappFirst: { type: String, default: '' },
+          whatsappRegen: { type: String, default: '' },
+          geminiResearch: { type: String, default: '' },
+          proposal: { type: String, default: '' },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
   },
   { timestamps: true }
 );

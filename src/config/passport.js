@@ -17,6 +17,9 @@ const jwtVerify = async (payload, done) => {
     if (!user || user.status === 'inactive') {
       return done(null, false);
     }
+    if (user.roleChangedAt && Math.floor(user.roleChangedAt.getTime() / 1000) > payload.iat) {
+      return done(null, false);
+    }
     done(null, user);
   } catch (error) {
     done(error, false);

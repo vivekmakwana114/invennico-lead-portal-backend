@@ -4,7 +4,7 @@ const { password, objectId } = require('./custom.validation');
 const getUsers = {
   query: Joi.object().keys({
     name: Joi.string(),
-    role: Joi.string().valid('admin', 'partner'),
+    role: Joi.string().valid('superAdmin', 'admin', 'partner'),
     status: Joi.string().valid('active', 'inactive'),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),

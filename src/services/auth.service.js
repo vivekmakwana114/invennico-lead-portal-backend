@@ -38,7 +38,7 @@ const logout = async (refreshToken) => {
   if (!refreshTokenDoc) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Not found');
   }
-  await refreshTokenDoc.remove();
+  await refreshTokenDoc.deleteOne();
 };
 
 /**
@@ -53,7 +53,7 @@ const refreshAuth = async (refreshToken) => {
     if (!user) {
       throw new Error();
     }
-    await refreshTokenDoc.remove();
+    await refreshTokenDoc.deleteOne();
     return tokenService.generateAuthTokens(user);
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
@@ -74,7 +74,7 @@ const resetPassword = async (resetPasswordToken, newPassword) => {
       throw new Error();
     }
     await Token.deleteMany({ user: user.id, type: tokenTypes.RESET_PASSWORD });
-    await userService.updateUserById(user.id, { password: newPassword });
+    await userService.updateUserById(user.id, { password: newPassword }, user.role);
   } catch (error) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Password reset failed');
   }
@@ -92,7 +92,7 @@ const forgotPassword = async (email) => {
   }
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const otpExpires = moment().add(config.jwt.otpExpirationMinutes, 'minutes').toDate();
-  await userService.updateUserById(user.id, { otp, otpExpires });
+  await userService.updateUserById(user.id, { otp, otpExpires }, user.role);
   await emailService.sendOtpEmail(email, otp);
 };
 
@@ -112,7 +112,7 @@ const verifyOtp = async (email, otp) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid or expired OTP');
   }
 
-  await userService.updateUserById(user.id, { otp: null, otpExpires: null });
+  await userService.updateUserById(user.id, { otp: null, otpExpires: null }, user.role);
 
   const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
   const resetToken = tokenService.generateToken(user.id, expires, tokenTypes.RESET_PASSWORD);

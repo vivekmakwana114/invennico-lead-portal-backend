@@ -68,6 +68,14 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null,
     },
+    plainPassword: {
+      type: String,
+      default: null,
+    },
+    roleChangedAt: {
+      type: Date,
+      default: null,
+    },
     otp: {
       type: String,
       default: null,

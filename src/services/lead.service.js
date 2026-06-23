@@ -49,13 +49,120 @@ function scaleMilestoneCosts(milestones, aiTotalRange, pricingTotalRange) {
   const loScale = pricing.lo / ai.lo;
   const hiScale = pricing.hi / ai.hi;
 
+  // Adaptive rounding: avoid collapsing small milestone costs to $0
+  const maxBudget = Math.max(pricing.lo, pricing.hi);
+  let roundUnit = 100;
+  if (maxBudget >= 100000) roundUnit = 1000;
+  else if (maxBudget >= 10000) roundUnit = 500;
+
   return milestones.map((m) => {
     const cost = parseBudgetRange(m.costRange);
     if (!cost) return m;
-    const scaledLo = Math.round((cost.lo * loScale) / 1000) * 1000;
-    const scaledHi = Math.round((cost.hi * hiScale) / 1000) * 1000;
+    const rawLo = cost.lo * loScale;
+    const rawHi = cost.hi * hiScale;
+    const scaledLo = rawLo > 0 ? Math.max(roundUnit, Math.round(rawLo / roundUnit) * roundUnit) : 0;
+    const scaledHi = rawHi > 0 ? Math.max(roundUnit, Math.round(rawHi / roundUnit) * roundUnit) : 0;
     return { ...m, costRange: `$${scaledLo.toLocaleString()} - $${scaledHi.toLocaleString()}` };
   });
+}
+
+function parseBudgetMidpoint(str) {
+  if (!str) return null;
+  const numbers = str.replace(/,/g, '').match(/\d+/g);
+  if (!numbers || numbers.length === 0) return null;
+  if (numbers.length === 1) return parseInt(numbers[0], 10);
+  return (parseInt(numbers[0], 10) + parseInt(numbers[1], 10)) / 2;
+}
+
+function scaleCostRange(costRange, ratio) {
+  if (!costRange) return costRange;
+  const numbers = costRange.replace(/,/g, '').match(/\d+/g);
+  if (!numbers || numbers.length === 0) return costRange;
+  const scaled = numbers.slice(0, 2).map((n) => {
+    const original = parseInt(n, 10);
+    const result = Math.round((original * ratio) / 100) * 100;
+    return original > 0 ? Math.max(100, result) : 0;
+  });
+  return scaled.length === 1
+    ? `$${scaled[0].toLocaleString()}`
+    : `$${scaled[0].toLocaleString()} - $${scaled[1].toLocaleString()}`;
+}
+
+function scaleDuration(duration, ratio) {
+  if (!duration) return duration;
+  const s = duration.toLowerCase().trim();
+  const unitMatch = s.match(/weeks?|months?/);
+  const unit = unitMatch ? unitMatch[0] : 'weeks';
+
+  // Existing range — scale both ends
+  const rangeMatch = s.match(/(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)/);
+  if (rangeMatch) {
+    const lo = Math.max(1, Math.round(parseFloat(rangeMatch[1]) * ratio));
+    const hi = Math.max(1, Math.round(parseFloat(rangeMatch[2]) * ratio));
+    return lo === hi ? `${lo} ${unit}` : `${lo}-${hi} ${unit}`;
+  }
+
+  // Single value — scale and express as lo-hi range (floor/ceil of result)
+  const singleMatch = s.match(/(\d+(?:\.\d+)?)/);
+  if (singleMatch) {
+    const scaled = parseFloat(singleMatch[1]) * ratio;
+    const lo = Math.max(1, Math.floor(scaled));
+    const hi = Math.max(1, Math.ceil(scaled));
+    return lo === hi ? `${lo} ${unit}` : `${lo}-${hi} ${unit}`;
+  }
+
+  return duration;
+}
+
+// Parses a milestone duration string to a {lo, hi} week range.
+// "5 weeks" → {lo:5, hi:5}   "4-6 weeks" → {lo:4, hi:6}   "2 months" → {lo:8, hi:8}
+function parseDurationRange(str) {
+  if (!str) return null;
+  const s = str.toLowerCase().trim();
+  const range = s.match(/(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*week/);
+  if (range) return { lo: parseFloat(range[1]), hi: parseFloat(range[2]) };
+  const single = s.match(/(\d+(?:\.\d+)?)\s*week/);
+  if (single) return { lo: parseFloat(single[1]), hi: parseFloat(single[1]) };
+  const mos = s.match(/(\d+(?:\.\d+)?)\s*month/);
+  if (mos) {
+    const w = parseFloat(mos[1]) * 4;
+    return { lo: w, hi: w };
+  }
+  return null;
+}
+
+// Sums all milestone costs (lo/hi separately) and durations (lo/hi in weeks separately)
+// to derive consistent budget range and timeline range.
+function deriveTotalsFromMilestones(milestones) {
+  let totalCostLo = 0;
+  let totalCostHi = 0;
+  let totalWeeksLo = 0;
+  let totalWeeksHi = 0;
+
+  milestones.forEach((m) => {
+    const cost = parseBudgetRange(m.costRange);
+    if (cost) {
+      totalCostLo += cost.lo;
+      totalCostHi += cost.hi;
+    }
+    const dur = parseDurationRange(m.duration);
+    if (dur) {
+      totalWeeksLo += dur.lo;
+      totalWeeksHi += dur.hi;
+    }
+  });
+
+  const budgetRange =
+    totalCostLo > 0 && totalCostHi > 0 ? `$${totalCostLo.toLocaleString()} - $${totalCostHi.toLocaleString()}` : null;
+
+  let timeline = null;
+  if (totalWeeksLo > 0 || totalWeeksHi > 0) {
+    const loMonths = Math.max(1, Math.floor(totalWeeksLo / 4));
+    const hiMonths = Math.max(1, Math.ceil(totalWeeksHi / 4));
+    timeline = loMonths === hiMonths ? `${loMonths} month${loMonths > 1 ? 's' : ''}` : `${loMonths}-${hiMonths} months`;
+  }
+
+  return { budgetRange, timeline };
 }
 
 function computePricingBudget(estimation, qualificationScore, pricingConfig) {
@@ -132,9 +239,31 @@ const mapAiResponse = (aiData) => ({
  * Create a lead. When isAnalyzed: true and no analysis is pre-supplied,
  * runs AI analysis server-side, maps the response, then saves and consumes 1 credit.
  */
+function deriveLeadPrefix(user) {
+  if (user.role === 'superAdmin') return 'S';
+  if (user.role === 'partner') {
+    const letters = user.name
+      .trim()
+      .replace(/[^a-zA-Z]/g, '')
+      .substring(0, 3)
+      .toUpperCase();
+    return letters || 'P';
+  }
+  return '';
+}
+
 const createLead = async (userId, leadBody) => {
   const user = await userService.getUserById(userId);
   if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  const submittedAt = new Date();
+
+  // eslint-disable-next-line no-param-reassign
+  leadBody.leadPrefix = deriveLeadPrefix(user);
+
+  if (user.role === 'partner') {
+    // eslint-disable-next-line no-param-reassign
+    leadBody.source = 'alliance';
+  }
 
   if (leadBody.isAnalyzed && user.availableCredits < 1) {
     throw new ApiError(httpStatus.PAYMENT_REQUIRED, 'Insufficient credits. Contact your admin to top up.');
@@ -205,11 +334,11 @@ const createLead = async (userId, leadBody) => {
   }
 
   const auditLog = [
-    { label: 'Lead submitted to portal', actor: 'System' },
-    { label: `Lead assigned to ${user.name}`, actor: user.name },
+    { label: 'Lead submitted to portal', actor: 'System', date: submittedAt },
+    { label: `Lead assigned to ${user.name}`, actor: user.name, date: new Date(submittedAt.getTime() + 1000) },
   ];
   if (leadBody.isAnalyzed) {
-    auditLog.push({ label: 'AI analysis completed', actor: 'AI Engine' });
+    auditLog.push({ label: 'AI analysis completed', actor: 'AI Engine', date: new Date() });
   }
 
   const lead = await Lead.create({
@@ -235,7 +364,7 @@ const createLead = async (userId, leadBody) => {
 const queryLeads = async (filter, options, requestingUser) => {
   const dbFilter = {};
 
-  if (requestingUser.role !== 'admin') {
+  if (!['admin', 'superAdmin'].includes(requestingUser.role)) {
     dbFilter.createdBy = requestingUser.id;
   } else if (filter.createdBy) {
     dbFilter.createdBy = filter.createdBy;
@@ -256,7 +385,9 @@ const queryLeads = async (filter, options, requestingUser) => {
     dbFilter.$or = [{ title: regex }, { clientContact: regex }];
   }
 
-  return Lead.paginate(dbFilter, { ...options, sortBy: 'createdAt:desc' });
+  const result = await Lead.paginate(dbFilter, { ...options, sortBy: 'createdAt:desc' });
+  await Lead.populate(result.results, { path: 'createdBy', select: 'name' });
+  return result;
 };
 
 /**
@@ -264,16 +395,19 @@ const queryLeads = async (filter, options, requestingUser) => {
  */
 const getLeadById = async (leadId, requestingUser) => {
   let lead;
-  if (/^LD-\d+$/i.test(leadId)) {
-    const num = parseInt(leadId.split('-')[1], 10);
-    lead = await Lead.findOne({ leadNumber: num }).populate('createdBy', 'name email');
+  if (/^LD(-[A-Za-z]+)?-\d+$/i.test(leadId)) {
+    // Handles: LD-1 (admin), LD-S-1 (superAdmin), LD-VIV-1 (partner)
+    const parts = leadId.toUpperCase().split('-');
+    const num = parseInt(parts[parts.length - 1], 10);
+    const prefix = parts.length > 2 ? parts.slice(1, -1).join('') : '';
+    lead = await Lead.findOne({ leadPrefix: prefix, leadNumber: num }).populate('createdBy', 'name email');
   } else {
     lead = await Lead.findById(leadId).populate('createdBy', 'name email');
   }
   if (!lead) throw new ApiError(httpStatus.NOT_FOUND, 'Lead not found');
 
   const createdById = lead.createdBy?._id?.toString() || lead.createdBy?.toString();
-  if (requestingUser.role !== 'admin' && createdById !== requestingUser.id) {
+  if (!['admin', 'superAdmin'].includes(requestingUser.role) && createdById !== requestingUser.id) {
     throw new ApiError(httpStatus.FORBIDDEN, 'You do not have access to this lead');
   }
 
@@ -288,6 +422,80 @@ const updateLeadById = async (leadId, updateBody, requestingUser) => {
 
   const prevStatus = lead.status;
   const prevIsAnalyzed = lead.isAnalyzed;
+
+  const milestonesInPayload = Array.isArray(updateBody.estimation?.milestones);
+  const budgetChanged =
+    updateBody.estimation?.budgetRange !== undefined && updateBody.estimation.budgetRange !== lead.estimation?.budgetRange;
+  const timelineChanged =
+    updateBody.estimation?.timeline !== undefined && updateBody.estimation.timeline !== lead.estimation?.timeline;
+
+  // Detect whether the milestones in the payload actually differ from what is stored.
+  // The frontend often sends the full estimation object even when only budget/timeline changed,
+  // so we need this check to avoid treating unchanged milestones as an explicit edit.
+  const storedMilestones = (lead.estimation?.milestones || []).map((m) => (m.toObject ? m.toObject() : { ...m }));
+  const incomingMilestones = milestonesInPayload ? updateBody.estimation.milestones : [];
+  const milestonesActuallyChanged =
+    milestonesInPayload &&
+    (incomingMilestones.length !== storedMilestones.length ||
+      incomingMilestones.some((m, i) => {
+        const s = storedMilestones[i] || {};
+        return m.costRange !== s.costRange || m.duration !== s.duration || m.phase !== s.phase;
+      }));
+
+  if ((budgetChanged || timelineChanged) && !milestonesActuallyChanged) {
+    // Budget or timeline changed — scale the stored milestones proportionally
+    let scaled = storedMilestones;
+
+    if (budgetChanged) {
+      const origMid = parseBudgetMidpoint(lead.estimation?.budgetRange);
+      const newMid = parseBudgetMidpoint(updateBody.estimation.budgetRange);
+      if (origMid && newMid && origMid !== newMid) {
+        const ratio = newMid / origMid;
+        scaled = scaled.map((m) => ({ ...m, costRange: scaleCostRange(m.costRange, ratio) }));
+      }
+    }
+
+    if (timelineChanged) {
+      const origMonths = parseTimelineMonths(lead.estimation?.timeline);
+      const newMonths = parseTimelineMonths(updateBody.estimation.timeline);
+      if (origMonths && newMonths && origMonths !== newMonths) {
+        const ratio = newMonths / origMonths;
+        scaled = scaled.map((m) => ({ ...m, duration: scaleDuration(m.duration, ratio) }));
+      }
+    }
+
+    // Re-derive totals from the scaled milestones, but only for the field that
+    // actually changed — avoids silently overwriting the untouched field.
+    const totals = deriveTotalsFromMilestones(scaled);
+    // eslint-disable-next-line no-param-reassign
+    updateBody.estimation = {
+      ...updateBody.estimation,
+      milestones: scaled,
+      ...(budgetChanged && totals.budgetRange && { budgetRange: totals.budgetRange }),
+      ...(timelineChanged && totals.timeline && { timeline: totals.timeline }),
+    };
+  }
+
+  if (milestonesActuallyChanged && incomingMilestones.length > 0) {
+    // Milestones directly edited — derive totals by summing lo/hi costs and durations
+    const totals = deriveTotalsFromMilestones(incomingMilestones);
+    // eslint-disable-next-line no-param-reassign
+    updateBody.estimation = {
+      ...updateBody.estimation,
+      ...(totals.budgetRange && { budgetRange: totals.budgetRange }),
+      ...(totals.timeline && { timeline: totals.timeline }),
+    };
+  }
+
+  // Always keep top-level quick-access fields in sync with estimation
+  if (updateBody.estimation?.budgetRange !== undefined) {
+    // eslint-disable-next-line no-param-reassign
+    updateBody.budget = updateBody.estimation.budgetRange;
+  }
+  if (updateBody.estimation?.timeline !== undefined) {
+    // eslint-disable-next-line no-param-reassign
+    updateBody.timeline = updateBody.estimation.timeline;
+  }
 
   Object.assign(lead, updateBody);
 
@@ -330,7 +538,7 @@ const deleteLeadById = async (leadId, requestingUser) => {
  */
 const getLeadStats = async (requestingUser) => {
   const filter = {};
-  if (requestingUser.role !== 'admin') {
+  if (!['admin', 'superAdmin'].includes(requestingUser.role)) {
     filter.createdBy = requestingUser.id;
   }
 
