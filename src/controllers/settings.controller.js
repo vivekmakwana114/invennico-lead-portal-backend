@@ -17,12 +17,30 @@ const updateSettings = catchAsync(async (req, res) => {
 
 const getPrompt = catchAsync(async (req, res) => {
   const settings = await settingsService.getSettings();
-  res.send({ success: true, message: 'Prompt fetched successfully', data: { aiPrompt: settings.aiPrompt || '' } });
+  const aiPrompts = {
+    leadAnalysis: settings.aiPrompts?.leadAnalysis || settings.aiPrompt || '',
+    whatsappFirst: settings.aiPrompts?.whatsappFirst || '',
+    whatsappRegen: settings.aiPrompts?.whatsappRegen || '',
+    geminiResearch: settings.aiPrompts?.geminiResearch || '',
+    proposal: settings.aiPrompts?.proposal || '',
+  };
+  res.send({ success: true, message: 'Prompts fetched successfully', data: { aiPrompts } });
 });
 
-const updatePrompt = catchAsync(async (req, res) => {
-  const settings = await settingsService.updateSettings({ aiPrompt: req.body.aiPrompt ?? '' });
-  res.send({ success: true, message: 'Prompt updated successfully', data: { aiPrompt: settings.aiPrompt || '' } });
+const VALID_PROMPT_KEYS = ['leadAnalysis', 'whatsappFirst', 'whatsappRegen', 'geminiResearch', 'proposal'];
+
+const updateSinglePrompt = catchAsync(async (req, res) => {
+  const { key } = req.params;
+  if (!VALID_PROMPT_KEYS.includes(key)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Invalid prompt key: ${key}`);
+  }
+  const value = req.body.value ?? '';
+  const settings = await settingsService.updateSettings({ [`aiPrompts.${key}`]: value });
+  res.send({
+    success: true,
+    message: 'Prompt updated successfully',
+    data: { key, value: settings.aiPrompts?.[key] ?? '' },
+  });
 });
 
 const uploadProposalTemplate = catchAsync(async (req, res) => {
@@ -47,4 +65,11 @@ const downloadProposalTemplate = catchAsync(async (req, res) => {
   res.download(filePath, 'proposal-template.docx');
 });
 
-module.exports = { getSettings, updateSettings, getPrompt, updatePrompt, uploadProposalTemplate, downloadProposalTemplate };
+module.exports = {
+  getSettings,
+  updateSettings,
+  getPrompt,
+  updateSinglePrompt,
+  uploadProposalTemplate,
+  downloadProposalTemplate,
+};

@@ -23,7 +23,11 @@ const leadSchema = mongoose.Schema(
   {
     leadNumber: {
       type: Number,
-      unique: true,
+    },
+
+    leadPrefix: {
+      type: String,
+      default: '',
     },
 
     createdBy: {
@@ -149,37 +153,34 @@ const leadSchema = mongoose.Schema(
     leadResearch: {
       client: {
         name: { type: String, default: null },
+        contact: { type: String, default: null },
+        socialLinks: {
+          linkedin: { type: String, default: null },
+          github: { type: String, default: null },
+          twitter: { type: String, default: null },
+          personalSite: { type: String, default: null },
+        },
         company: { type: String, default: null },
         location: { type: String, default: null },
         industry: { type: String, default: null },
-        companySize: { type: String, default: null },
         businessDescription: { type: String, default: null },
       },
-      platform: {
-        source: { type: String, default: null },
-        postingContext: { type: String, default: null },
-        urgencyLevel: { type: String, default: null },
-        typicalBudgetRange: { type: String, default: null },
-      },
-      projectStatus: {
-        phase: { type: String, default: null },
-        decisionTimeline: { type: String, default: null },
-        competitiveLandscape: { type: String, default: null },
+      platforms: {
+        type: [
+          {
+            name: { type: String, default: null },
+            projectUrl: { type: String, default: null },
+            overview: { type: String, default: null },
+            _id: false,
+          },
+        ],
+        default: [],
       },
       budget: {
         stated: { type: String, default: null },
-        estimatedRange: { type: String, default: null },
         currency: { type: String, default: null },
         paymentPreference: { type: String, default: null },
       },
-      coreRequirements: {
-        summary: { type: String, default: null },
-        features: { type: [String], default: [] },
-        technicalConstraints: { type: [String], default: [] },
-        integrations: { type: [String], default: [] },
-        platforms: { type: [String], default: [] },
-      },
-      researchInsights: { type: [String], default: [] },
       generatedAt: { type: Date, default: null },
     },
 
@@ -208,11 +209,14 @@ leadSchema.index({ status: 1 });
 leadSchema.index({ source: 1 });
 leadSchema.index({ createdAt: -1 });
 
+leadSchema.index({ leadPrefix: 1, leadNumber: 1 }, { unique: true, sparse: true });
+
 leadSchema.options.toJSON = {
   transform(doc, ret) {
     if (ret.leadNumber != null) {
+      const prefix = ret.leadPrefix || '';
       // eslint-disable-next-line no-param-reassign
-      ret.leadId = `LD-${ret.leadNumber}`;
+      ret.leadId = prefix ? `LD-${prefix}-${ret.leadNumber}` : `LD-${ret.leadNumber}`;
     }
     // toJSON plugin strips createdAt globally; restore it for leads since the UI needs it
     // eslint-disable-next-line no-param-reassign
@@ -226,7 +230,15 @@ leadSchema.plugin(paginate);
 leadSchema.pre('save', async function () {
   if (this.isNew) {
     const Counter = mongoose.model('Counter');
-    const counter = await Counter.findOneAndUpdate({ model: 'lead' }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+    const prefix = this.leadPrefix || '';
+    // Each prefix has its own counter: 'lead' for admin, 'lead-S' for superAdmin,
+    // 'lead-VIV' for partner Vivek, etc. — sequences are fully independent.
+    const counterKey = prefix ? `lead-${prefix}` : 'lead';
+    const counter = await Counter.findOneAndUpdate(
+      { model: counterKey },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after', upsert: true }
+    );
     this.leadNumber = counter.seq;
   }
 });

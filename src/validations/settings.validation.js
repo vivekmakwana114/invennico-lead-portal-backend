@@ -65,10 +65,17 @@ const updateSettings = {
     .min(1),
 };
 
-const updatePrompt = {
+const PROMPT_KEYS = ['leadAnalysis', 'whatsappFirst', 'whatsappRegen', 'geminiResearch', 'proposal'];
+
+const updateSinglePrompt = {
+  params: Joi.object().keys({
+    key: Joi.string()
+      .valid(...PROMPT_KEYS)
+      .required(),
+  }),
   body: Joi.object().keys({
-    aiPrompt: Joi.string().allow('', null).required(),
+    value: Joi.string().allow('', null).required(),
   }),
 };
 
-module.exports = { updateSettings, updatePrompt };
+module.exports = { updateSettings, updateSinglePrompt };

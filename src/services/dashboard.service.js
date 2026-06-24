@@ -123,7 +123,9 @@ function getPeriodKey(date, dateRange) {
 }
 
 function buildBaseFilter(requestingUser, dateRange) {
-  const userFilter = requestingUser.role !== 'admin' ? { createdBy: new Types.ObjectId(requestingUser.id) } : {};
+  const userFilter = !['admin', 'superAdmin'].includes(requestingUser.role)
+    ? { createdBy: new Types.ObjectId(requestingUser.id) }
+    : {};
   return { ...userFilter, ...buildDateFilter(dateRange) };
 }
 
@@ -303,15 +305,18 @@ const getRecentLeads = async (requestingUser, { dateRange = 'year' } = {}) => {
 
   const leads = await Lead.find(baseFilter).sort({ createdAt: -1 }).limit(8).populate('createdBy', 'name').lean();
 
-  return leads.map((lead) => ({
-    id: lead._id,
-    leadId: `LD-${lead.leadNumber}`,
-    title: lead.title,
-    source: capitalize(lead.source),
-    budget: lead.budget || null,
-    status: lead.status,
-    createdAt: lead.createdAt,
-  }));
+  return leads.map((lead) => {
+    const prefix = lead.leadPrefix || '';
+    return {
+      id: lead._id,
+      leadId: prefix ? `LD-${prefix}-${lead.leadNumber}` : `LD-${lead.leadNumber}`,
+      title: lead.title,
+      source: capitalize(lead.source),
+      budget: lead.budget || null,
+      status: lead.status,
+      createdAt: lead.createdAt,
+    };
+  });
 };
 
 // ── 8. Recent activity ────────────────────────────────────────────────────────
@@ -326,6 +331,7 @@ const getRecentActivity = async (requestingUser, { dateRange = 'year' } = {}) =>
       $project: {
         leadTitle: '$title',
         leadNumber: '$leadNumber',
+        leadPrefix: '$leadPrefix',
         label: '$auditLog.label',
         actor: '$auditLog.actor',
         date: '$auditLog.date',
@@ -335,13 +341,16 @@ const getRecentActivity = async (requestingUser, { dateRange = 'year' } = {}) =>
     { $limit: 10 },
   ]);
 
-  return entries.map((e) => ({
-    leadTitle: e.leadTitle,
-    leadId: `LD-${e.leadNumber}`,
-    label: e.label,
-    actor: e.actor,
-    date: e.date,
-  }));
+  return entries.map((e) => {
+    const prefix = e.leadPrefix || '';
+    return {
+      leadTitle: e.leadTitle,
+      leadId: prefix ? `LD-${prefix}-${e.leadNumber}` : `LD-${e.leadNumber}`,
+      label: e.label,
+      actor: e.actor,
+      date: e.date,
+    };
+  });
 };
 
 // ── 9. Upcoming follow-ups ────────────────────────────────────────────────────

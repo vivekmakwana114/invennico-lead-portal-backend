@@ -1,11 +1,15 @@
 const httpStatus = require('http-status');
-const { User } = require('../models');
+const { User, Token } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { CreditTransaction } = require('../models');
+const { tokenTypes } = require('../config/tokens');
 
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+  if (userBody.role === 'superAdmin') {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Cannot create users with super admin role');
   }
   return User.create(userBody);
 };
@@ -22,24 +26,46 @@ const getUserByEmail = async (email) => {
   return User.findOne({ email });
 };
 
-const updateUserById = async (userId, updateBody) => {
+const updateUserById = async (userId, updateBody, requestingUserRole) => {
   const user = await getUserById(userId);
   if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+
+  // superAdmin entries are invisible to non-superAdmin actors
+  if (user.role === 'superAdmin' && requestingUserRole !== 'superAdmin') {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // superAdmin role cannot be assigned via API — set it directly in the database
+  if (updateBody.role === 'superAdmin') {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Cannot assign super admin role');
+  }
+
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
+  const roleChanged = updateBody.role && updateBody.role !== user.role;
   Object.assign(user, updateBody);
   await user.save();
+  if (roleChanged) {
+    await user.updateOne({ roleChangedAt: new Date() });
+    await Token.deleteMany({ user: userId, type: tokenTypes.REFRESH });
+  }
   return user;
 };
 
-const deleteUserById = async (userId) => {
+const deleteUserById = async (userId, requestingUserRole) => {
   const user = await getUserById(userId);
   if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+
+  // superAdmin entries are invisible to non-superAdmin actors
+  if (user.role === 'superAdmin' && requestingUserRole !== 'superAdmin') {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
   if (user.status === 'active') {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Mark the user as inactive before deleting');
   }
-  await user.remove();
+  await user.deleteOne();
   return user;
 };
 
@@ -47,7 +73,7 @@ const changePassword = async (user, currentPassword, newPassword) => {
   if (!(await user.isPasswordMatch(currentPassword))) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Current password is incorrect');
   }
-  await updateUserById(user.id, { password: newPassword });
+  await updateUserById(user.id, { password: newPassword }, user.role);
 };
 
 /**
