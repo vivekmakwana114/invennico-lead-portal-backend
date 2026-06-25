@@ -6,6 +6,10 @@ const { Lead } = require('../models');
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const ALL_SOURCES = ['alliance', 'direct', 'referral', 'upwork', 'freelancer', 'other'];
 
+// Flow: new → engagement-started → proposal-sent → qualified (sales handoff) → won | drop
+// Both 'qualified' and 'won' passed pre-sales qualification — must stay in qualified counts.
+const QUALIFIED_STATUSES = ['qualified', 'won'];
+
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 function parseBudgetMidpoint(str) {
@@ -135,13 +139,13 @@ const getStats = async (requestingUser, { dateRange = 'year' } = {}) => {
   const baseFilter = buildBaseFilter(requestingUser, dateRange);
   const pipelineFilter = {
     ...baseFilter,
-    status: 'qualified',
+    status: { $in: QUALIFIED_STATUSES },
     budget: { $ne: null },
   };
 
   const [total, qualified, proposalSent, won, pipelineLeads] = await Promise.all([
     Lead.countDocuments(baseFilter),
-    Lead.countDocuments({ ...baseFilter, status: 'qualified' }),
+    Lead.countDocuments({ ...baseFilter, status: { $in: QUALIFIED_STATUSES } }),
     Lead.countDocuments({ ...baseFilter, status: 'proposal-sent' }),
     Lead.countDocuments({ ...baseFilter, status: 'won' }),
     Lead.find(pipelineFilter).select('budget').lean(),
@@ -171,7 +175,7 @@ const getLeadsChart = async (requestingUser, { dateRange = 'year' } = {}) => {
       $group: {
         _id: groupConfig.groupExpr,
         received: { $sum: 1 },
-        qualified: { $sum: { $cond: [{ $eq: ['$status', 'qualified'] }, 1, 0] } },
+        qualified: { $sum: { $cond: [{ $in: ['$status', QUALIFIED_STATUSES] }, 1, 0] } },
       },
     },
     { $sort: { _id: 1 } },

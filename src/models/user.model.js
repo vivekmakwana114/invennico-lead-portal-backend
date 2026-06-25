@@ -49,6 +49,14 @@ const userSchema = mongoose.Schema(
       type: String,
       trim: true,
       default: null,
+      validate(value) {
+        if (value) {
+          const digits = value.replace(/\D/g, '');
+          if (!/^\+?[\d\s\-().]{7,20}$/.test(value) || digits.length < 7 || digits.length > 15) {
+            throw new Error('Phone must be a valid phone number (7–15 digits, optional country code)');
+          }
+        }
+      },
     },
     department: {
       type: String,

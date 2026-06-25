@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { password, objectId } = require('./custom.validation');
+const { password, objectId, phone } = require('./custom.validation');
 
 const getUsers = {
   query: Joi.object().keys({
@@ -23,7 +23,7 @@ const createUser = {
     name: Joi.string().required(),
     email: Joi.string().required().email(),
     role: Joi.string().valid('admin', 'partner').default('partner'),
-    phone: Joi.string().allow('', null),
+    phone: Joi.string().custom(phone).allow('', null),
     department: Joi.string().allow('', null),
     location: Joi.string().allow('', null),
   }),
@@ -39,7 +39,7 @@ const updateUser = {
       email: Joi.string().email(),
       role: Joi.string().valid('admin', 'partner'),
       status: Joi.string().valid('active', 'inactive'),
-      phone: Joi.string().allow('', null),
+      phone: Joi.string().custom(phone).allow('', null),
       department: Joi.string().allow('', null),
       location: Joi.string().allow('', null),
     })
@@ -56,7 +56,7 @@ const updateProfile = {
   body: Joi.object()
     .keys({
       name: Joi.string(),
-      phone: Joi.string().allow('', null),
+      phone: Joi.string().custom(phone).allow('', null),
       department: Joi.string().allow('', null),
       location: Joi.string().allow('', null),
     })

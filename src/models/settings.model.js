@@ -21,21 +21,21 @@ const SECTION_KEYS = [
 const pricingConfigSchema = new mongoose.Schema(
   {
     engineerRates: {
-      intern: { type: Number, default: 15 },
-      junior: { type: Number, default: 30 },
-      midLevel: { type: Number, default: 50 },
-      senior: { type: Number, default: 75 },
-      architect: { type: Number, default: 100 },
+      intern: { type: Number, default: 0 },
+      junior: { type: Number, default: 0 },
+      midLevel: { type: Number, default: 0 },
+      senior: { type: Number, default: 0 },
+      architect: { type: Number, default: 0 },
     },
     complexityMultipliers: {
-      low: { type: Number, default: 1.0 },
-      medium: { type: Number, default: 1.3 },
-      high: { type: Number, default: 1.6 },
+      low: { type: Number, default: 0 },
+      medium: { type: Number, default: 0 },
+      high: { type: Number, default: 0 },
     },
     timelineMultipliers: {
-      rush: { type: Number, default: 1.4 },
-      standard: { type: Number, default: 1.0 },
-      extended: { type: Number, default: 0.9 },
+      rush: { type: Number, default: 0 },
+      standard: { type: Number, default: 0 },
+      extended: { type: Number, default: 0 },
     },
   },
   { _id: false }
