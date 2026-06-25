@@ -21,7 +21,17 @@ const password = (value, helpers) => {
   return value;
 };
 
+// Accepts optional leading +, then 7–15 digits (spaces, dashes, dots, parens allowed as separators)
+const phone = (value, helpers) => {
+  const digits = value.replace(/\D/g, '');
+  if (!value.match(/^\+?[\d\s\-().]{7,20}$/) || digits.length < 7 || digits.length > 15) {
+    return helpers.message('phone number must be a valid phone number (7–15 digits, optional country code)');
+  }
+  return value;
+};
+
 module.exports = {
   objectId,
   password,
+  phone,
 };

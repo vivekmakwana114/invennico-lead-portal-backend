@@ -48,30 +48,33 @@ After completing your research, return ONLY a valid JSON object in this exact st
   }
 }`;
 
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
 const researchLead = async ({ title, details, clientContact, pdfContent }) => {
   if (!config.gemini.apiKey) {
     throw new Error('GEMINI_API_KEY is not configured');
   }
 
-  const ai = getClient();
-  const useGrounding = process.env.GEMINI_SEARCH_GROUNDING === 'true';
-
-  logger.debug(
-    '[Gemini Research] Grounding %s',
-    useGrounding ? 'ENABLED (live web search)' : 'DISABLED (training knowledge only)'
+  logger.info(
+    '[Gemini Research] Input received — title: %d chars | details: %d chars | clientContact: %s | pdfContent: %s',
+    (title || '').length,
+    (details || '').length,
+    clientContact ? `"${clientContact}"` : 'null',
+    pdfContent ? `${pdfContent.length} chars` : 'null (no PDF or extraction returned empty)'
   );
+
+  const ai = getClient();
 
   const geminiSettings = await Settings.findById('global').lean();
   const customGemini = geminiSettings?.aiPrompts?.geminiResearch?.trim();
   const fullGeminiPrompt = customGemini || DEFAULT_GEMINI_FULL_PROMPT;
   logger.info('[Gemini Research] Prompt source: %s', customGemini ? 'SETTING (custom)' : 'DEFAULT (code level)');
 
-  const requestConfig = {};
-  if (useGrounding) {
-    requestConfig.tools = [{ googleSearch: {} }];
-  }
+  // Google Search grounding is always on — it is the entire purpose of this service.
+  // gemini-2.0-flash is required; gemini-2.5-flash-lite does not support the googleSearch tool.
+  const requestConfig = { tools: [{ googleSearch: {} }] };
 
-  const pdfSnippet = pdfContent ? pdfContent.slice(0, 3000) + (pdfContent.length > 3000 ? '\n[…truncated]' : '') : null;
+  const pdfSnippet = pdfContent ? pdfContent.slice(0, 8000) + (pdfContent.length > 8000 ? '\n[…truncated]' : '') : null;
 
   const prompt = `${fullGeminiPrompt}
 
@@ -83,7 +86,15 @@ Attached Context: ${pdfSnippet || 'None'}
 
 Use the LEAD DATA above to perform the search tasks. Return ONLY the valid JSON object in the exact structure specified above — no markdown, no explanation.`;
 
-  logger.debug('[Gemini Research] Calling gemini-2.5-flash-lite for lead: %s', title);
+  logger.info(
+    '[Gemini Research] → model: %s | prompt: %d chars (system: %d | title: %d | details: %d | pdf: %d) | grounding: googleSearch ON',
+    GEMINI_MODEL,
+    prompt.length,
+    fullGeminiPrompt.length,
+    (title || '').length,
+    (details || '').length,
+    pdfSnippet ? pdfSnippet.length : 0
+  );
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,7 +104,7 @@ Use the LEAD DATA above to perform the search tasks. Return ONLY the valid JSON 
     try {
       // eslint-disable-next-line no-await-in-loop
       response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: requestConfig,
       });
@@ -119,17 +130,20 @@ Use the LEAD DATA above to perform the search tasks. Return ONLY the valid JSON 
   // Log whether Google Search grounding was actually invoked
   const candidate = response.candidates?.[0];
   const groundingMeta = candidate?.groundingMetadata;
-  if (useGrounding) {
-    if (groundingMeta?.webSearchQueries?.length) {
-      logger.info('[Gemini Research] Grounding active — queries: %s', groundingMeta.webSearchQueries.join(' | '));
-    } else {
-      logger.warn(
-        '[Gemini Research] Grounding ENABLED but no search queries found in response — model may not support grounding or found nothing to search'
-      );
-    }
+  if (groundingMeta?.webSearchQueries?.length) {
+    logger.info('[Gemini Research] ✓ Google Search used — queries: %s', groundingMeta.webSearchQueries.join(' | '));
+  } else {
+    logger.warn(
+      '[Gemini Research] ✗ Google Search NOT used — response has no webSearchQueries. API key may lack grounding permission or billing is inactive.'
+    );
   }
 
-  logger.debug('[Gemini Research] Raw response (%d chars):\n%s', rawText?.length ?? 0, rawText);
+  logger.info(
+    '[Gemini Research] ← response: %d chars | finishReason: %s | snippet: %s',
+    rawText?.length ?? 0,
+    candidate?.finishReason ?? 'unknown',
+    rawText ? rawText.slice(0, 200).replace(/\n/g, ' ') : '(empty)'
+  );
 
   if (!rawText) {
     throw new Error(`Gemini returned empty response (finishReason: ${candidate?.finishReason ?? 'unknown'})`);
