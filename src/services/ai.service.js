@@ -44,6 +44,7 @@ OUTPUT (strict JSON only):
 RULES:
 - Be practical, not theoretical
 - Do NOT oversell
+- Do NOT repeat any recommand tech stack in the output
 - Keep estimates realistic based on industry standards
 - Think like a CTO + sales strategist
 - Tech stack names must be SHORT and CLEAN — single standard identifiers only (e.g. "React", "Node.js", "PostgreSQL", "AWS", "TypeScript", "Flutter"). No descriptions, no parenthetical notes, no version numbers, no "with X" or "for X" suffixes
@@ -157,26 +158,6 @@ const DEFAULT_WHATSAPP_REGEN_PROMPT = `Please revise the WhatsApp message based 
 const getClient = () => new Anthropic({ apiKey: config.anthropic.apiKey });
 
 const analyzeLead = async ({ title, details, source, notes, attachments, pdfContent }) => {
-  // Log preview only — pdfContent capped at 500 chars here for readability.
-  // The actual prompt sent to Claude below contains the FULL pdfContent.
-  logger.debug(
-    '[AI Analyze] Lead input preview (pdfContent capped at 500 chars for log):\n%s',
-    JSON.stringify(
-      {
-        title: title || 'N/A',
-        source: source || 'N/A',
-        details: details || 'N/A',
-        notes: notes || 'None',
-        attachments: attachments || 'None',
-        pdfContent: pdfContent
-          ? `${pdfContent.slice(0, 500)}${pdfContent.length > 500 ? '… [truncated for log]' : ''}`
-          : 'None',
-      },
-      null,
-      2
-    )
-  );
-
   const settings = await Settings.findById('global').lean();
   const customLeadAnalysis = settings?.aiPrompts?.leadAnalysis?.trim();
   const fullLeadAnalysisPrompt = customLeadAnalysis || DEFAULT_LEAD_ANALYSIS_PROMPT;
@@ -192,9 +173,16 @@ Internal Notes: ${notes || 'None'}
 Attachments: ${attachments || 'None'}
 PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}`;
 
-  const client = getClient();
+  logger.debug(
+    '[Lead Analysis] → Claude | model: claude-haiku-4-5 | max_tokens: 4096 | lead: "%s" | title: %dch | details: %dch | pdf: %s | prompt: %dch',
+    title || 'N/A',
+    (title || '').length,
+    (details || '').length,
+    pdfContent ? `${pdfContent.length}ch` : 'none',
+    prompt.length
+  );
 
-  logger.debug('[AI Analyze] Calling Claude — model: claude-haiku-4-5, max_tokens: 4096');
+  const client = getClient();
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5',
@@ -204,16 +192,31 @@ PDF/Document Content: ${pdfContent ? `\n${pdfContent}` : 'None'}`;
 
   const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
 
-  logger.debug('[AI Analyze] Raw response (%d chars):\n%s', rawText.length, rawText);
-
   // Strip markdown code fences if model adds them despite instructions
   const jsonText = rawText
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
-  const parsed = JSON.parse(jsonText);
 
-  logger.debug('[AI Analyze] Parsed keys: %s', Object.keys(parsed).join(', '));
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    logger.error(
+      '[Lead Analysis] ✗ Failed to parse JSON — %s | raw snippet: %s',
+      err.message,
+      rawText.slice(0, 200).replace(/\n/g, ' ')
+    );
+    throw err;
+  }
+
+  logger.info(
+    '[Lead Analysis] ✓ Success | output: %dch | score: %s | label: %s | keys: %s',
+    rawText.length,
+    parsed.qualification?.score ?? '?',
+    parsed.qualification?.label ?? '?',
+    Object.keys(parsed).join(', ')
+  );
 
   return parsed;
 };
@@ -228,24 +231,12 @@ const generateWhatsapp = async ({
   followUpNotes,
 }) => {
   const isRegen = !!(previousDraft && followUpNotes);
-
-  const inputPayload = isRegen
-    ? { mode: 'regenerate', previousDraftLength: previousDraft.length, followUpNotes }
-    : {
-        leadSummary: leadSummary || 'N/A',
-        techStack: techStack || 'N/A',
-        timeline: timeline || 'N/A',
-        budget: budget || 'N/A',
-        originalLeadDescription: originalLead || 'N/A',
-      };
-
-  logger.debug('[AI WhatsApp] Input payload sent to Claude:\n%s', JSON.stringify(inputPayload, null, 2));
+  const tag = isRegen ? '[WhatsApp Regen]' : '[WhatsApp Draft]';
 
   const settings = await Settings.findById('global').lean();
 
   const customFirst = settings?.aiPrompts?.whatsappFirst?.trim();
   const firstInstructions = customFirst || DEFAULT_WHATSAPP_FIRST_PROMPT;
-  logger.info('[WhatsApp First] Prompt source: %s', customFirst ? 'SETTING (custom)' : 'DEFAULT (code level)');
 
   const firstUserPrompt = `${firstInstructions}
 
@@ -274,19 +265,32 @@ ${originalLead || 'N/A'}`;
     const customRegen = settings?.aiPrompts?.whatsappRegen?.trim();
     const regenInstruction = customRegen || DEFAULT_WHATSAPP_REGEN_PROMPT;
     logger.info('[WhatsApp Regen] Prompt source: %s', customRegen ? 'SETTING (custom)' : 'DEFAULT (code level)');
-    // Chat-style refinement: previous draft is the assistant turn, follow-up is the next user turn
+
     messages = [
       { role: 'user', content: firstUserPrompt },
       { role: 'assistant', content: previousDraft },
       { role: 'user', content: `${regenInstruction}\n\n${followUpNotes}` },
     ];
-    logger.debug('[AI WhatsApp] Mode: regenerate — 3-turn chat');
-  } else {
-    messages = [{ role: 'user', content: firstUserPrompt }];
-    logger.debug('[AI WhatsApp] Mode: first generation');
-  }
 
-  logger.debug('[AI WhatsApp] Calling Claude — model: claude-haiku-4-5, max_tokens: 1024');
+    logger.debug(
+      '[WhatsApp Regen] → Claude | mode: 3-turn | model: claude-haiku-4-5 | max_tokens: 1024 | lead: "%s" | followUp: %dch | prompt: %dch',
+      leadSummary || 'N/A',
+      (followUpNotes || '').length,
+      firstUserPrompt.length + previousDraft.length + regenInstruction.length + (followUpNotes || '').length
+    );
+  } else {
+    logger.info('[WhatsApp Draft] Prompt source: %s', customFirst ? 'SETTING (custom)' : 'DEFAULT (code level)');
+
+    messages = [{ role: 'user', content: firstUserPrompt }];
+
+    logger.debug(
+      '[WhatsApp Draft] → Claude | mode: first | model: claude-haiku-4-5 | max_tokens: 1024 | lead: "%s" | summary: %dch | desc: %dch | prompt: %dch',
+      leadSummary || 'N/A',
+      (leadSummary || '').length,
+      (originalLead || '').length,
+      firstUserPrompt.length
+    );
+  }
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5',
@@ -296,7 +300,7 @@ ${originalLead || 'N/A'}`;
 
   const message = response.content[0].type === 'text' ? response.content[0].text : '';
 
-  logger.debug('[AI WhatsApp] Raw response (%d chars):\n%s', message.length, message);
+  logger.info('%s ✓ Success | output: %dch', tag, message.length);
 
   return { message };
 };
@@ -354,15 +358,13 @@ const generateProposalContent = async ({
     additionalContext: scopeDoc || null,
   };
 
-  logger.debug('[AI Proposal] Input payload:\n%s', JSON.stringify(inputPayload, null, 2));
-
   // clientQuestions is intentionally excluded — the template carries a static placeholder for the client to fill in.
   const sectionsToGenerate = (enabledSectionKeys || []).filter((k) => k !== 'clientQuestions');
 
   const proposalSettings = await Settings.findById('global').lean();
   const customProposal = proposalSettings?.aiPrompts?.proposal?.trim();
   const proposalMainPrompt = customProposal || DEFAULT_PROPOSAL_FULL_PROMPT;
-  logger.info('[Proposal] Prompt source: %s', customProposal ? 'SETTING (custom)' : 'DEFAULT (code level)');
+  logger.info('[Proposal Gen] Prompt source: %s', customProposal ? 'SETTING (custom)' : 'DEFAULT (code level)');
 
   const prompt = `${proposalMainPrompt}
 
@@ -372,9 +374,16 @@ ${JSON.stringify(inputPayload, null, 2)}
 SECTIONS TO GENERATE: ${sectionsToGenerate.join(', ')}
 Omit any key NOT in the list above.`;
 
-  const client = getClient();
+  logger.debug(
+    '[Proposal Gen] → Claude | model: claude-haiku-4-5 | max_tokens: 8192 | lead: "%s" | sections: %d (%s) | input: %dch | prompt: %dch',
+    lead.title || 'N/A',
+    sectionsToGenerate.length,
+    sectionsToGenerate.join(', '),
+    JSON.stringify(inputPayload).length,
+    prompt.length
+  );
 
-  logger.debug('[AI Proposal] Calling Claude — model: claude-haiku-4-5, max_tokens: 8192');
+  const client = getClient();
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5',
@@ -384,15 +393,28 @@ Omit any key NOT in the list above.`;
 
   const rawText = response.content[0].type === 'text' ? response.content[0].text : '';
 
-  logger.debug('[AI Proposal] Raw response (%d chars):\n%s', rawText.length, rawText);
-
   const jsonText = rawText
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
-  const parsed = JSON.parse(jsonText);
 
-  logger.debug('[AI Proposal] Parsed sections: %s', Object.keys(parsed).join(', '));
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    logger.error(
+      '[Proposal Gen] ✗ Failed to parse JSON — %s | raw snippet: %s',
+      err.message,
+      rawText.slice(0, 200).replace(/\n/g, ' ')
+    );
+    throw err;
+  }
+
+  logger.info(
+    '[Proposal Gen] ✓ Success | output: %dch | sections generated: %s',
+    rawText.length,
+    Object.keys(parsed).join(', ')
+  );
 
   return parsed;
 };
